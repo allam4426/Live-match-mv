@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.cache/
+
+# Large uploaded/extracted files
+app_file.gz
+*.zip
+Live-Match-MV/
+Match-Bracket/
+downloaded_file
+uploaded_file
+
+# Logs
+*.log
+
+# OS
+.DS_Store

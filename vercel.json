@@ -1,0 +1,5 @@
+{
+  "buildCommand": "cd artifacts/football-app && pnpm install && pnpm run build",
+  "outputDirectory": "artifacts/football-app/dist",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
