@@ -19,7 +19,10 @@ export const MatchEventInputType = {
   penalty_goal: 'penalty_goal',
   penalty_missed: 'penalty_missed',
   ten_meter_goal: 'ten_meter_goal',
+  ten_meter_missed: 'ten_meter_missed',
   foul: 'foul',
   substitution: 'substitution',
   mvp: 'mvp',
+  var_review: 'var_review',
+  var_goal_cancelled: 'var_goal_cancelled',
 } as const;

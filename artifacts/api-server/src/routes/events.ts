@@ -44,6 +44,18 @@ const EVENT_PUSH: Partial<Record<EventType, (opts: {
     title: "❌ Penalty Missed",
     body: `${playerNumber ? `#${playerNumber} ` : ""}${playerName} (${teamName}) · ${minute}'`,
   }),
+  ten_meter_missed: ({ playerName, playerNumber, teamName, minute }) => ({
+    title: "❌ 10m Penalty Missed",
+    body: `${playerNumber ? `#${playerNumber} ` : ""}${playerName} (${teamName}) · ${minute}'`,
+  }),
+  var_review: ({ teamName, minute }) => ({
+    title: "📺 VAR Review",
+    body: `VAR checking ${teamName} decision · ${minute}'`,
+  }),
+  var_goal_cancelled: ({ playerName, playerNumber, minute }) => ({
+    title: "📺 VAR: Goal Cancelled",
+    body: `${playerNumber ? `#${playerNumber} ` : ""}${playerName} goal disallowed · ${minute}'`,
+  }),
   red_card: ({ playerName, playerNumber, teamName, minute }) => ({
     title: "🟥 Red Card!",
     body: `${playerNumber ? `#${playerNumber} ` : ""}${playerName} (${teamName}) · ${minute}'`,

@@ -15,8 +15,17 @@ import { SubstitutionIcon } from "@/components/substitution-icon";
 type EventType =
   | "goal" | "yellow_card" | "red_card" | "second_yellow_red" | "own_goal"
   | "penalty_awarded" | "penalty_goal" | "penalty_missed"
-  | "ten_meter_goal" | "foul"
-  | "substitution" | "mvp";
+  | "ten_meter_goal" | "ten_meter_missed" | "foul"
+  | "substitution" | "mvp"
+  | "var_review" | "var_goal_cancelled";
+
+const VAR_OUTCOMES = [
+  { value: "Goal Confirmed ✅",  emoji: "✅", label: "Goal Confirmed" },
+  { value: "Goal Cancelled ❌",  emoji: "❌", label: "Goal Cancelled" },
+  { value: "Penalty Awarded 🟡", emoji: "🟡", label: "Penalty Awarded" },
+  { value: "No Foul ✗",         emoji: "✗",  label: "No Foul" },
+  { value: "Offside 🚩",         emoji: "🚩", label: "Offside" },
+];
 
 /* ─── stopwatch ─────────────────────────────────────────────────────────────
  * Key design decisions:
@@ -122,8 +131,9 @@ type ModalState = {
 const EVENT_ICON_MAP: Record<string, string> = {
   goal: "⚽", yellow_card: "🟨", red_card: "🟥", second_yellow_red: "🟨🟥", own_goal: "↩⚽",
   penalty_awarded: "P!", penalty_goal: "P⚽", penalty_missed: "P✗",
-  ten_meter_goal: "10⚽", foul: "🚫",
+  ten_meter_goal: "10⚽", ten_meter_missed: "10✗", foul: "🚫",
   substitution: "↕", mvp: "⭐",
+  var_review: "📺", var_goal_cancelled: "📺❌",
 };
 
 function EventModal({
@@ -141,6 +151,8 @@ function EventModal({
   const isCommentary = modal.type === "penalty_awarded"; // reuse for commentary edge cases
   const isGoal = modal.type === "goal" || modal.type === "penalty_goal" || modal.type === "ten_meter_goal";
   const isSub = modal.type === "substitution";
+  const isVAR = modal.type === "var_review" || modal.type === "var_goal_cancelled";
+  const noPlayerRequired = isCommentary || isVAR;
 
   const [teamSide, setTeamSide] = useState<"home" | "away">("home");
   const [minute, setMinute] = useState(defaultMinute);
@@ -164,8 +176,8 @@ function EventModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const finalPlayerName = isMvp ? playerName : playerName;
-    if (!finalPlayerName && modal.type !== "penalty_awarded") return;
+    const finalPlayerName = playerName;
+    if (!finalPlayerName && !noPlayerRequired) return;
 
     const descParts: string[] = [];
     if (isSub && subOutName) descParts.push(`Out: ${subOutName}`);
@@ -175,7 +187,7 @@ function EventModal({
       type: modal.type,
       minute: isMvp ? "90" : minute,
       teamId,
-      playerName: finalPlayerName || "Unknown",
+      playerName: finalPlayerName || (isVAR ? "VAR" : "Unknown"),
       playerNumber: playerNumber || undefined,
       assistPlayerName: assist || undefined,
       description: descParts.join(" · ") || undefined,
@@ -319,18 +331,21 @@ function ScoreBtn({ onClick, children }: { onClick: () => void; children: React.
 
 /* ─── log icon ─── */
 const LOG_ICONS: Record<string, { icon: string; label: string; color: string }> = {
-  goal:               { icon: "⚽",   label: "Goal",            color: "text-emerald-400" },
-  yellow_card:        { icon: "🟨",   label: "Yellow",          color: "text-yellow-400" },
-  red_card:           { icon: "🟥",   label: "Red Card",        color: "text-red-400" },
-  second_yellow_red:  { icon: "🟨🟥", label: "2nd Yellow+Red",  color: "text-orange-400" },
-  own_goal:           { icon: "↩⚽",  label: "Own Goal",        color: "text-orange-400" },
-  penalty_awarded:    { icon: "P!",   label: "Penalty",         color: "text-blue-400" },
-  penalty_goal:       { icon: "P⚽",  label: "Pen. Goal",       color: "text-emerald-400" },
-  penalty_missed:     { icon: "P✗",   label: "Pen. Miss",       color: "text-red-400" },
-  ten_meter_goal:     { icon: "10⚽", label: "10m Pen Goal",    color: "text-emerald-400" },
-  foul:               { icon: "🚫",   label: "Foul",            color: "text-orange-300" },
-  substitution:       { icon: "↕",    label: "Sub",             color: "text-purple-400" },
-  mvp:                { icon: "⭐",   label: "MVP",             color: "text-amber-400" },
+  goal:               { icon: "⚽",   label: "Goal",              color: "text-emerald-400" },
+  yellow_card:        { icon: "🟨",   label: "Yellow",            color: "text-yellow-400" },
+  red_card:           { icon: "🟥",   label: "Red Card",          color: "text-red-400" },
+  second_yellow_red:  { icon: "🟨🟥", label: "2nd Yellow+Red",    color: "text-orange-400" },
+  own_goal:           { icon: "↩⚽",  label: "Own Goal",          color: "text-orange-400" },
+  penalty_awarded:    { icon: "P!",   label: "Penalty",           color: "text-blue-400" },
+  penalty_goal:       { icon: "P⚽",  label: "Pen. Goal",         color: "text-emerald-400" },
+  penalty_missed:     { icon: "P✗",   label: "Pen. Miss",         color: "text-red-400" },
+  ten_meter_goal:     { icon: "10⚽", label: "10m Pen Goal",      color: "text-emerald-400" },
+  ten_meter_missed:   { icon: "10✗",  label: "10m Pen Missed",    color: "text-red-400" },
+  foul:               { icon: "🚫",   label: "Foul",              color: "text-orange-300" },
+  substitution:       { icon: "↕",    label: "Sub",               color: "text-purple-400" },
+  mvp:                { icon: "⭐",   label: "MVP",               color: "text-amber-400" },
+  var_review:         { icon: "📺",   label: "VAR Review",        color: "text-cyan-400" },
+  var_goal_cancelled: { icon: "📺❌", label: "VAR: Goal Cancelled", color: "text-red-400" },
 };
 
 /* ─── main component ─── */
@@ -377,6 +392,9 @@ export function EventsTab() {
   const [editingEventId, setEditingEventId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [editNumber, setEditNumber] = useState("");
+
+  // VAR decision state
+  const [varDecisionEventId, setVarDecisionEventId] = useState<number | null>(null);
 
   const invalidateEvents = useCallback(() =>
     qc.invalidateQueries({ queryKey: getListMatchEventsQueryKey(selectedMatchId) }),
@@ -509,6 +527,32 @@ export function EventsTab() {
   const handleDelete = (eventId: number) =>
     deleteEvent.mutate({ id: selectedMatchId, eventId }, { onSuccess: invalidateEvents });
 
+  const handleVarDecision = (eventId: number, outcome: string) => {
+    const event = (events ?? []).find(e => e.id === eventId);
+    if (!event) return;
+    updateEvent.mutate(
+      {
+        id: selectedMatchId,
+        eventId,
+        data: {
+          type: event.type as Parameters<typeof updateEvent.mutate>[0]["data"]["type"],
+          minute: event.minute,
+          teamId: event.teamId,
+          playerName: event.playerName ?? "VAR",
+          playerNumber: event.playerNumber ?? undefined,
+          assistPlayerName: event.assistPlayerName ?? undefined,
+          description: outcome,
+        },
+      },
+      {
+        onSuccess: () => {
+          setVarDecisionEventId(null);
+          invalidateEvents();
+        },
+      }
+    );
+  };
+
   const handleEditStart = (event: { id: number; playerName?: string | null; playerNumber?: string | null }) => {
     setEditingEventId(event.id);
     setEditName(event.playerName ?? "");
@@ -544,16 +588,19 @@ export function EventsTab() {
   /* event tile config */
   type Tile = { type: EventType; label: string; bg: string; icon: string; futsalOnly?: boolean };
   const EVENT_TILES: Tile[] = ([
-    { type: "goal",               label: "Goal",            bg: "bg-[#1a4a2e] hover:bg-[#205838]", icon: "⚽" },
-    { type: "yellow_card",        label: "Yellow Card",     bg: "bg-[#7a5800] hover:bg-[#8f6600]", icon: "🟨" },
-    { type: "red_card",           label: "Red Card",        bg: "bg-[#6b1111] hover:bg-[#801313]", icon: "🟥" },
-    { type: "second_yellow_red",  label: "2nd Yellow+Red",  bg: "bg-[#7a3200] hover:bg-[#8f3c00]", icon: "🟨🟥" },
-    { type: "substitution",       label: "Substitution",    bg: "bg-[#0d3060] hover:bg-[#104080]", icon: "__sub__" },
-    { type: "own_goal",           label: "Own Goal",        bg: "bg-[#5a2d00] hover:bg-[#6e3700]", icon: "↩⚽" },
-    { type: "penalty_goal",       label: "Pen. Goal",       bg: "bg-[#1a4a2e] hover:bg-[#205838]", icon: "__pen_goal__" },
-    { type: "penalty_missed",     label: "Pen. Missed",     bg: "bg-[#4a1a1a] hover:bg-[#5a2020]", icon: "__pen_missed__" },
-    { type: "ten_meter_goal",     label: "10m Pen Goal",    bg: "bg-[#0a4a3a] hover:bg-[#0c5845]", icon: "10⚽", futsalOnly: true },
-    { type: "foul",               label: "Foul",            bg: "bg-[#4a2e00] hover:bg-[#5c3800]", icon: "🚫",  futsalOnly: true },
+    { type: "goal",               label: "Goal",             bg: "bg-[#1a4a2e] hover:bg-[#205838]", icon: "⚽" },
+    { type: "yellow_card",        label: "Yellow Card",      bg: "bg-[#7a5800] hover:bg-[#8f6600]", icon: "🟨" },
+    { type: "red_card",           label: "Red Card",         bg: "bg-[#6b1111] hover:bg-[#801313]", icon: "🟥" },
+    { type: "second_yellow_red",  label: "2nd Yellow+Red",   bg: "bg-[#7a3200] hover:bg-[#8f3c00]", icon: "🟨🟥" },
+    { type: "substitution",       label: "Substitution",     bg: "bg-[#0d3060] hover:bg-[#104080]", icon: "__sub__" },
+    { type: "own_goal",           label: "Own Goal",         bg: "bg-[#5a2d00] hover:bg-[#6e3700]", icon: "↩⚽" },
+    { type: "penalty_goal",       label: "Pen. Goal",        bg: "bg-[#1a4a2e] hover:bg-[#205838]", icon: "__pen_goal__" },
+    { type: "penalty_missed",     label: "Pen. Missed",      bg: "bg-[#4a1a1a] hover:bg-[#5a2020]", icon: "__pen_missed__" },
+    { type: "ten_meter_goal",     label: "10m Pen Goal",     bg: "bg-[#0a4a3a] hover:bg-[#0c5845]", icon: "10⚽", futsalOnly: true },
+    { type: "ten_meter_missed",   label: "10m Pen Missed",   bg: "bg-[#4a1a1a] hover:bg-[#5a2020]", icon: "__pen_missed__", futsalOnly: true },
+    { type: "foul",               label: "Foul",             bg: "bg-[#4a2e00] hover:bg-[#5c3800]", icon: "🚫",  futsalOnly: true },
+    { type: "var_review",         label: "VAR Review",       bg: "bg-[#0a2a3a] hover:bg-[#0c3348]", icon: "📺" },
+    { type: "var_goal_cancelled", label: "VAR: Goal Off",    bg: "bg-[#3a1a1a] hover:bg-[#4a2020]", icon: "📺❌" },
   ] as Tile[]).filter(t => !t.futsalOnly || isFutsal);
 
   return (
@@ -883,32 +930,69 @@ export function EventsTab() {
                             </div>
                           ) : (
                             /* ── Normal row ── */
-                            <div className="flex items-center gap-3">
-                              <span className="text-base w-6 text-center shrink-0">{info?.icon ?? "•"}</span>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-semibold text-white leading-tight">
-                                  {event.playerNumber && <span className="text-white/40 mr-1">#{event.playerNumber}</span>}
-                                  {event.playerName
-                                    ? event.playerName
-                                    : <span className="text-white/25 italic text-xs">No player — tap ✏️ to add</span>}
-                                  {event.assistPlayerName && <span className="text-white/40 text-xs ml-1">▷ {event.assistPlayerName}</span>}
-                                </p>
-                                <p className="text-[10px] text-white/40 mt-0.5">
-                                  <span className={cn("font-black mr-1.5", info?.color ?? "text-white/50")}>{event.minute}'</span>
-                                  {info?.label ?? event.type}
-                                  {event.description && ` · ${event.description}`}
-                                </p>
+                            <div className="space-y-1.5">
+                              <div className="flex items-center gap-3">
+                                <span className="text-base w-6 text-center shrink-0">{info?.icon ?? "•"}</span>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-semibold text-white leading-tight">
+                                    {event.playerNumber && <span className="text-white/40 mr-1">#{event.playerNumber}</span>}
+                                    {event.playerName
+                                      ? event.playerName
+                                      : <span className="text-white/25 italic text-xs">No player — tap ✏️ to add</span>}
+                                    {event.assistPlayerName && <span className="text-white/40 text-xs ml-1">▷ {event.assistPlayerName}</span>}
+                                  </p>
+                                  <p className="text-[10px] text-white/40 mt-0.5">
+                                    <span className={cn("font-black mr-1.5", info?.color ?? "text-white/50")}>{event.minute}'</span>
+                                    {info?.label ?? event.type}
+                                    {event.description && (
+                                      <span className="ml-1 text-cyan-400 font-semibold">· {event.description}</span>
+                                    )}
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => handleEditStart(event)}
+                                  title="Edit player"
+                                  className="text-white/20 hover:text-blue-400 p-1 transition-colors shrink-0">
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                <button onClick={() => handleDelete(event.id)}
+                                  className="text-white/20 hover:text-red-400 p-1 transition-colors shrink-0">
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
                               </div>
-                              <button
-                                onClick={() => handleEditStart(event)}
-                                title="Edit player"
-                                className="text-white/20 hover:text-blue-400 p-1 transition-colors shrink-0">
-                                <Pencil className="w-3.5 h-3.5" />
-                              </button>
-                              <button onClick={() => handleDelete(event.id)}
-                                className="text-white/20 hover:text-red-400 p-1 transition-colors shrink-0">
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              {/* ── VAR decision panel ── */}
+                              {event.type === "var_review" && (
+                                varDecisionEventId === event.id ? (
+                                  <div className="ml-9 space-y-1.5">
+                                    <p className="text-[9px] font-black text-cyan-400/70 uppercase tracking-widest">VAR Decision</p>
+                                    <div className="grid grid-cols-2 gap-1.5">
+                                      {VAR_OUTCOMES.map(o => (
+                                        <button
+                                          key={o.value}
+                                          onClick={() => handleVarDecision(event.id, o.value)}
+                                          disabled={updateEvent.isPending}
+                                          className="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-2 py-1.5 text-[11px] font-semibold text-white transition-colors disabled:opacity-50">
+                                          <span>{o.emoji}</span>
+                                          <span>{o.label}</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                    <button
+                                      onClick={() => setVarDecisionEventId(null)}
+                                      className="text-[10px] text-white/30 hover:text-white/50 transition-colors">
+                                      Cancel
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="ml-9">
+                                    <button
+                                      onClick={() => setVarDecisionEventId(event.id)}
+                                      className="text-[10px] font-black text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-lg px-2.5 py-1 transition-colors">
+                                      📺 Set VAR Decision
+                                    </button>
+                                  </div>
+                                )
+                              )}
                             </div>
                           )}
                         </div>

@@ -101,7 +101,16 @@ function useLiveStopwatch(
   useEffect(() => {
     if (!isLive) { setSecs(null); anchorRef.current = null; return; }
     const parsed = parseSecs(minute);
-    if (parsed !== null) boundaryRef.current = getRegBoundarySecs(parsed, sport);
+    if (parsed !== null) {
+      // If minute already contains "+" (e.g. "40+2"), we are in stoppage time.
+      // Use only the base minute for boundary so the extra display works correctly.
+      if (minute && minute.includes("+")) {
+        const baseMin = parseInt(minute.split("+")[0], 10);
+        boundaryRef.current = isNaN(baseMin) ? getRegBoundarySecs(parsed, sport) : baseMin * 60;
+      } else {
+        boundaryRef.current = getRegBoundarySecs(parsed, sport);
+      }
+    }
     if (parsed !== null) anchorRef.current = { base: parsed, time: Date.now() };
     setSecs(parsed);
   }, [minute, isLive, sport]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -173,6 +182,7 @@ const EVENT_INFO: Record<string, { emoji: string; label: string }> = {
   penalty_goal: { emoji: "⚽", label: "Pen. Goal" },
   own_goal: { emoji: "↩", label: "Own Goal" },
   ten_meter_goal: { emoji: "🎯", label: "10m Pen Goal" },
+  ten_meter_missed: { emoji: "❌", label: "10m Pen Missed" },
   foul: { emoji: "🚫", label: "Foul" },
   yellow_card: { emoji: "🟨", label: "Yellow" },
   red_card: { emoji: "🟥", label: "Red Card" },
@@ -181,6 +191,8 @@ const EVENT_INFO: Record<string, { emoji: string; label: string }> = {
   penalty_awarded: { emoji: "📋", label: "Penalty" },
   substitution: { emoji: "🔄", label: "Sub" },
   mvp: { emoji: "⭐", label: "MVP" },
+  var_review: { emoji: "📺", label: "VAR Review" },
+  var_goal_cancelled: { emoji: "📺❌", label: "VAR: Goal Cancelled" },
 };
 
 const SHOW_LABEL = new Set([
@@ -188,7 +200,10 @@ const SHOW_LABEL = new Set([
   "ten_meter_goal",
   "substitution",
   "penalty_missed",
+  "ten_meter_missed",
   "own_goal",
+  "var_review",
+  "var_goal_cancelled",
 ]);
 
 const CARD_Y = "bg-[#FFE600]";
@@ -284,12 +299,16 @@ function InlineEventIcon({ type }: { type: string }) {
         <span className={`absolute top-0 left-0 w-[8px] h-[11px] rounded-[2px] ${CARD_R}`} />
       </span>
     );
-   if (type === "penalty_missed")
-   return <PenaltyIcon outcome="missed" />;
+  if (type === "penalty_missed" || type === "ten_meter_missed")
+    return <PenaltyIcon outcome="missed" />;
   if (type === "foul")
-  return <span className="text-[13px] leading-none">🚫</span>;
+    return <span className="text-[13px] leading-none">🚫</span>;
   if (type === "mvp")
     return <span className="text-[12px] leading-none">⭐</span>;
+  if (type === "var_review")
+    return <span className="text-[13px] leading-none">📺</span>;
+  if (type === "var_goal_cancelled")
+    return <span className="text-[12px] leading-none">📺❌</span>;
   return null;
 }
 
@@ -324,9 +343,11 @@ function EventRow({
               )}
               {event.playerName}
             </span>
-            {["penalty_goal", "penalty_missed", "ten_meter_goal", "foul", "own_goal"].includes(event.type) && (
+            {["penalty_goal", "penalty_missed", "ten_meter_goal", "ten_meter_missed", "foul", "own_goal", "var_review", "var_goal_cancelled"].includes(event.type) && (
               <span className="text-[10px] text-muted-foreground/70 leading-none">
-                {(EVENT_INFO[event.type] ?? { label: event.type }).label}
+                {event.description
+                  ? `${(EVENT_INFO[event.type] ?? { label: event.type }).label} · ${event.description}`
+                  : (EVENT_INFO[event.type] ?? { label: event.type }).label}
               </span>
             )}
           </>
