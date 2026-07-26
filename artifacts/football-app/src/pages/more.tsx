@@ -96,8 +96,8 @@ export default function MorePage() {
           right={
             <>
               <IconLink icon={Phone} href="tel:+9603000000" />
-              <IconLink icon={Mail} href="mailto:info@livematchmv.com" />
-              <IconLink icon={Globe} href="https://livematchmv.com" />
+              <IconLink icon={Mail} href="mailto:info@livematchmv.online" />
+              <IconLink icon={Globe} href="https://livematchmv.online" />
             </>
           }
         />
@@ -117,8 +117,8 @@ export default function MorePage() {
           label="Stay connected"
           right={
             <>
-              <IconLink icon={Instagram} href="https://instagram.com/livematchmv" />
-              <IconLink icon={Facebook} href="https://facebook.com/livematchmv" />
+              <IconLink icon={Instagram} href="https://www.instagram.com/livematch.mv?igsh=MXFwMXc1eGUONm5OaA==" />
+              <IconLink icon={Facebook} href="https://www.facebook.com/share/18okuiNThY/?mibextid=wwXIfr" />
             </>
           }
         />
