@@ -1,3 +1,13 @@
+// Take control of all clients immediately on activation so push events
+// are handled without waiting for a page reload.
+self.addEventListener("install", (event) => {
+  event.waitUntil(self.skipWaiting());
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
 self.addEventListener("push", (event) => {
   if (!event.data) return;
   let payload;

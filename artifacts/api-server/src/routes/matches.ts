@@ -298,6 +298,21 @@ router.patch("/matches/:id", async (req, res) => {
     );
   }
 
+  // Send push notification when match transitions to finished
+  if (old?.status !== "finished" && match.status === "finished") {
+    const homeName = row.homeTeam?.name ?? "Home";
+    const awayName = row.awayTeam?.name ?? "Away";
+    const homeScore = match.homeScore ?? 0;
+    const awayScore = match.awayScore ?? 0;
+    setImmediate(() =>
+      sendPushToAll({
+        title: "🏁 Full Time",
+        body: `${homeName} ${homeScore}–${awayScore} ${awayName} — ${match.competition}`,
+        url: `/match/${id}`,
+      })
+    );
+  }
+
   res.json(result);
 });
 

@@ -14,11 +14,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TeamLogo } from "@/components/team-logo";
 import { LivePulse } from "@/components/live-pulse";
-import { ChevronLeft, Play, Share2, Check } from "lucide-react";
+import { ChevronLeft, Play, Share2, Check, Bell, BellOff } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { PenaltyIcon } from "@/components/penalty-icon";
 import { SubstitutionIcon } from "@/components/substitution-icon";
+import { usePushNotifications } from "@/hooks/use-push-notifications";
 
 /* ─── helpers ─── */
 
@@ -1421,6 +1422,7 @@ export default function MatchDetails() {
   const matchId = parseInt(id || "0", 10);
   const [activeTab, setActiveTab] = useState<Tab>("Summary");
   const [copied, setCopied] = useState(false);
+  const { permission: pushPermission, subscribed, loading: pushLoading, subscribe, unsubscribe } = usePushNotifications();
 
   const { data: match, isLoading } = useGetMatch(matchId, {
     query: {
@@ -1536,7 +1538,7 @@ export default function MatchDetails() {
         <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r-full" />
 
         <div className="relative px-4 pt-4 pb-0">
-          {/* Action row: back ← … share */}
+          {/* Action row: back ← … bell + share */}
           <div className="flex items-center justify-between mb-4">
             <Link href="/">
               <span className="w-9 h-9 rounded-full bg-black/30 border border-white/10 flex items-center justify-center cursor-pointer hover:bg-black/50 transition-colors">
@@ -1551,14 +1553,38 @@ export default function MatchDetails() {
                 <span className="text-[9px] text-white/40">{match.matchGroup}</span>
               )}
             </div>
-            <button
-              onClick={handleShare}
-              className="w-9 h-9 rounded-full bg-black/30 border border-white/10 flex items-center justify-center hover:bg-black/50 transition-colors"
-            >
-              {copied
-                ? <Check className="w-4 h-4 text-emerald-400" />
-                : <Share2 className="w-4 h-4 text-white" />}
-            </button>
+            <div className="flex items-center gap-2">
+              {pushPermission !== "unsupported" && (
+                <button
+                  onClick={() => subscribed ? unsubscribe() : subscribe()}
+                  disabled={pushLoading || pushPermission === "denied"}
+                  title={
+                    pushPermission === "denied"
+                      ? "Notifications blocked — enable in browser settings"
+                      : subscribed
+                      ? "Turn off match alerts"
+                      : "Get notified about goals & match updates"
+                  }
+                  className={cn(
+                    "w-9 h-9 rounded-full bg-black/30 border border-white/10 flex items-center justify-center hover:bg-black/50 transition-colors",
+                    pushPermission === "denied" && "opacity-40 cursor-not-allowed",
+                    pushLoading && "opacity-60",
+                  )}
+                >
+                  {subscribed
+                    ? <Bell className="w-4 h-4 text-primary fill-current" />
+                    : <BellOff className="w-4 h-4 text-white/70" />}
+                </button>
+              )}
+              <button
+                onClick={handleShare}
+                className="w-9 h-9 rounded-full bg-black/30 border border-white/10 flex items-center justify-center hover:bg-black/50 transition-colors"
+              >
+                {copied
+                  ? <Check className="w-4 h-4 text-emerald-400" />
+                  : <Share2 className="w-4 h-4 text-white" />}
+              </button>
+            </div>
           </div>
 
           {/* Teams + score */}
