@@ -3,6 +3,7 @@ import { TeamLogo } from "./team-logo";
 import { Link } from "wouter";
 import { Play, MapPin, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLiveStopwatch } from "@/hooks/use-live-stopwatch";
 
 function halfLabel(minute: string | null | undefined, sport?: string | null): string {
   if (!minute) return "";
@@ -22,27 +23,19 @@ function halfLabel(minute: string | null | undefined, sport?: string | null): st
   return "1ST";
 }
 
-function LiveMinute({ minute, sport }: { minute?: string | null; sport?: string | null }) {
-  const half = halfLabel(minute, sport);
-  const isHT = minute === "HT" || minute === "PSO";
-  return (
-    <div className="flex items-center justify-center gap-1.5 mb-1">
-      {!isHT && half && (
-        <span className="text-[10px] font-black text-teal-300/80 uppercase tracking-widest bg-teal-300/10 px-2 py-0.5 rounded-full">
-          {half}
-        </span>
-      )}
-      <span className={cn(
-        "text-[11px] font-black tabular-nums tracking-wide",
-        isHT ? "text-yellow-300" : "text-white/70"
-      )}>
-        {isHT ? (minute === "PSO" ? "PSO" : "HALF TIME") : `${minute}'`}
-      </span>
-    </div>
-  );
-}
-
 function BannerCard({ match, dim }: { match: Match; dim?: boolean }) {
+  const isLive = match.status === "live";
+  const stopwatch = useLiveStopwatch(match.id, match.minute, isLive, match.sport, match.clockAnchorMs);
+
+  const minute = match.minute;
+  const half = halfLabel(minute, match.sport);
+  const isHT = minute === "HT" || minute === "PSO";
+  const timeDisplay = isHT
+    ? (minute === "PSO" ? "PSO" : "HALF TIME")
+    : stopwatch
+      ? `${stopwatch.main}${stopwatch.extra ?? ""}`
+      : `${minute}'`;
+
   return (
     <Link href={`/match/${match.id}`}>
       <div className={cn(
@@ -67,7 +60,19 @@ function BannerCard({ match, dim }: { match: Match; dim?: boolean }) {
 
         {/* Minute */}
         <div className="pt-2.5 px-4">
-          <LiveMinute minute={match.minute} sport={match.sport} />
+          <div className="flex items-center justify-center gap-1.5 mb-1">
+            {!isHT && half && (
+              <span className="text-[10px] font-black text-teal-300/80 uppercase tracking-widest bg-teal-300/10 px-2 py-0.5 rounded-full">
+                {half}
+              </span>
+            )}
+            <span className={cn(
+              "text-[11px] font-black tabular-nums tracking-wide",
+              isHT ? "text-yellow-300" : "text-white/70"
+            )}>
+              {timeDisplay}
+            </span>
+          </div>
         </div>
 
         {/* Teams + Score */}
