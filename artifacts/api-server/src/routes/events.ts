@@ -52,9 +52,21 @@ const EVENT_PUSH: Partial<Record<EventType, (opts: {
     title: "📺 VAR Review",
     body: `VAR checking ${teamName} decision · ${minute}'`,
   }),
-  var_goal_cancelled: ({ playerName, playerNumber, minute }) => ({
-    title: "📺 VAR: Goal Cancelled",
-    body: `${playerNumber ? `#${playerNumber} ` : ""}${playerName} goal disallowed · ${minute}'`,
+  var_award_goal: ({ teamName, minute }) => ({
+    title: "📺✅ VAR: Goal Awarded!",
+    body: `${teamName} goal confirmed · ${minute}'`,
+  }),
+  var_no_goal: ({ teamName, minute }) => ({
+    title: "📺❌ VAR: No Goal",
+    body: `${teamName} goal disallowed · ${minute}'`,
+  }),
+  var_award_foul: ({ teamName, minute }) => ({
+    title: "📺🚫 VAR: Foul Awarded",
+    body: `Foul awarded to ${teamName} · ${minute}'`,
+  }),
+  var_award_penalty: ({ teamName, minute }) => ({
+    title: "📺 VAR: Penalty Awarded!",
+    body: `Penalty awarded to ${teamName} · ${minute}'`,
   }),
   red_card: ({ playerName, playerNumber, teamName, minute }) => ({
     title: "🟥 Red Card!",

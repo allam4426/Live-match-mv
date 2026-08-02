@@ -24,5 +24,8 @@ export const MatchEventInputType = {
   substitution: 'substitution',
   mvp: 'mvp',
   var_review: 'var_review',
-  var_goal_cancelled: 'var_goal_cancelled',
+  var_award_goal: 'var_award_goal',
+  var_no_goal: 'var_no_goal',
+  var_award_foul: 'var_award_foul',
+  var_award_penalty: 'var_award_penalty',
 } as const;

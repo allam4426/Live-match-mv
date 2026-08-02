@@ -191,8 +191,11 @@ const EVENT_INFO: Record<string, { emoji: string; label: string }> = {
   penalty_awarded: { emoji: "📋", label: "Penalty" },
   substitution: { emoji: "🔄", label: "Sub" },
   mvp: { emoji: "⭐", label: "MVP" },
-  var_review: { emoji: "📺", label: "VAR Review" },
-  var_goal_cancelled: { emoji: "📺❌", label: "VAR: Goal Cancelled" },
+  var_review:         { emoji: "📺", label: "VAR Review" },
+  var_award_goal:     { emoji: "📺", label: "VAR: Goal" },
+  var_no_goal:        { emoji: "📺", label: "VAR: No Goal" },
+  var_award_foul:     { emoji: "📺", label: "VAR: Foul" },
+  var_award_penalty:  { emoji: "📺", label: "VAR: Penalty" },
 };
 
 const SHOW_LABEL = new Set([
@@ -203,7 +206,10 @@ const SHOW_LABEL = new Set([
   "ten_meter_missed",
   "own_goal",
   "var_review",
-  "var_goal_cancelled",
+  "var_award_goal",
+  "var_no_goal",
+  "var_award_foul",
+  "var_award_penalty",
 ]);
 
 const CARD_Y = "bg-[#FFE600]";
@@ -262,7 +268,9 @@ function EventIcon({ type }: { type: string }) {
       ) : type === "second_yellow_red" ? (
         <SecondYellowRedCard />
       ) : type === "own_goal" ? (
-      <img src="/own-goal.png" width="32" height="32" />
+        <img src="/own-goal.png" width="32" height="32" />
+      ) : type === "var_review" || type === "var_award_goal" || type === "var_no_goal" || type === "var_award_foul" || type === "var_award_penalty" ? (
+        <img src="/var-icon.png" width="36" height="28" style={{ filter: "brightness(0) invert(1)", opacity: 0.85 }} />
       ) : (
         info.emoji
       )}
@@ -305,10 +313,8 @@ function InlineEventIcon({ type }: { type: string }) {
     return <span className="text-[13px] leading-none">🚫</span>;
   if (type === "mvp")
     return <span className="text-[12px] leading-none">⭐</span>;
-  if (type === "var_review")
-    return <span className="text-[13px] leading-none">📺</span>;
-  if (type === "var_goal_cancelled")
-    return <span className="text-[12px] leading-none">📺❌</span>;
+  if (type === "var_review" || type === "var_award_goal" || type === "var_no_goal" || type === "var_award_foul" || type === "var_award_penalty")
+    return <img src="/var-icon.png" width="22" height="17" className="inline-block align-middle opacity-80" />;
   return null;
 }
 
@@ -343,7 +349,7 @@ function EventRow({
               )}
               {event.playerName}
             </span>
-            {["penalty_goal", "penalty_missed", "ten_meter_goal", "ten_meter_missed", "foul", "own_goal", "var_review", "var_goal_cancelled"].includes(event.type) && (
+            {["penalty_goal", "penalty_missed", "ten_meter_goal", "ten_meter_missed", "foul", "own_goal", "var_review", "var_award_goal", "var_no_goal", "var_award_foul", "var_award_penalty"].includes(event.type) && (
               <span className="text-[10px] text-muted-foreground/70 leading-none">
                 {event.description
                   ? `${(EVENT_INFO[event.type] ?? { label: event.type }).label} · ${event.description}`

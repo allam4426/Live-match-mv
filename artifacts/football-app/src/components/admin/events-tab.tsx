@@ -17,22 +17,13 @@ type EventType =
   | "penalty_awarded" | "penalty_goal" | "penalty_missed"
   | "ten_meter_goal" | "ten_meter_missed" | "foul"
   | "substitution" | "mvp"
-  | "var_review" | "var_goal_cancelled";
-
-const VAR_OUTCOMES = [
-  { value: "Goal Confirmed ✅",  emoji: "✅", label: "Goal Confirmed" },
-  { value: "Goal Cancelled ❌",  emoji: "❌", label: "Goal Cancelled" },
-  { value: "Penalty Awarded 🟡", emoji: "🟡", label: "Penalty Awarded" },
-  { value: "No Foul ✗",         emoji: "✗",  label: "No Foul" },
-  { value: "Offside 🚩",         emoji: "🚩", label: "Offside" },
-];
+  | "var_review" | "var_award_goal" | "var_no_goal" | "var_award_foul" | "var_award_penalty";
 
 /* ─── stopwatch ─────────────────────────────────────────────────────────────
- * Key design decisions:
- *  - Stoppage ("45+N") only activates when admin explicitly presses +1 min.
- *    The clock naturally counts 46, 47 … 90 without triggering stoppage mode.
- *  - When paused (half-time), initRef saves current position so the clock
- *    resumes correctly when the second half starts — no jump back to 00:00.
+ * Futsal: auto-stoppage at 20' (H1) and 40' (H2) — clock keeps running past
+ *         the boundary and shows "20+N:SS" / "40+N:SS" automatically.
+ * Football: manual stoppage via "+1 min" button.
+ * halfPhase tracks which half we are in (0 = 1st, 1 = 2nd) for futsal.
  * ─────────────────────────────────────────────────────────────────────────── */
 function parseMinuteToSeconds(minute: string | null | undefined): number {
   if (!minute) return 0;
@@ -42,19 +33,27 @@ function parseMinuteToSeconds(minute: string | null | undefined): number {
   return Math.max(0, n - 1) * 60;
 }
 
-function useMatchStopwatch(isRunning: boolean, matchId: number, initialMinute: string | null | undefined) {
+// Futsal half boundaries indexed by phase (0 = 1st half, 1 = 2nd half)
+const FUTSAL_BOUNDARIES = [20 * 60, 40 * 60] as const;
+
+function useMatchStopwatch(
+  isRunning: boolean,
+  matchId: number,
+  initialMinute: string | null | undefined,
+  isFutsal?: boolean,
+) {
   const initRef = useRef(0);
-  const elapsedRef = useRef(0);          // always tracks live elapsed for save-on-pause
+  const elapsedRef = useRef(0);
   const startWallRef = useRef<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
-  // Stoppage is EXPLICIT — only set when admin presses "+1 min"
+  // Football only — explicit stoppage via "+1 min"
   const [stoppageBase, setStoppageBase] = useState<number | null>(null);
   const [stoppageCount, setStoppageCount] = useState(0);
+  // Futsal half phase: 0 = 1st half (boundary 20'), 1 = 2nd half (boundary 40')
+  const [halfPhase, setHalfPhase] = useState(0);
 
-  // Keep elapsedRef in sync every render (no extra re-render cost)
   elapsedRef.current = elapsed;
 
-  // Re-initialize when the selected match changes
   useEffect(() => {
     const init = parseMinuteToSeconds(initialMinute);
     initRef.current = init;
@@ -62,11 +61,15 @@ function useMatchStopwatch(isRunning: boolean, matchId: number, initialMinute: s
     setStoppageBase(null);
     setStoppageCount(0);
     startWallRef.current = null;
+    if (isFutsal) {
+      // Infer phase from stored minute (e.g. "21" → 2nd half)
+      const min = parseInt((initialMinute || "0").split("+")[0], 10) || 0;
+      setHalfPhase(min > 20 ? 1 : 0);
+    }
   }, [matchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!isRunning) {
-      // ★ Save current position so second half resumes from here (e.g. 45:xx)
       initRef.current = elapsedRef.current;
       startWallRef.current = null;
       return;
@@ -80,23 +83,24 @@ function useMatchStopwatch(isRunning: boolean, matchId: number, initialMinute: s
     return () => clearInterval(id);
   }, [isRunning]);
 
-  const reset = (toMinute = 0) => {
+  // reset(toMinute, phase?) — phase only used for futsal half changes
+  const reset = (toMinute = 0, phase?: number) => {
     const toSeconds = Math.max(0, toMinute) * 60;
     initRef.current = toSeconds;
     startWallRef.current = isRunning ? Date.now() - toSeconds * 1000 : null;
     setElapsed(toSeconds);
     setStoppageBase(null);
     setStoppageCount(0);
+    if (phase !== undefined) setHalfPhase(phase);
   };
 
-  /** Add one extra minute of stoppage time. Activates "45+N" display. */
+  /** Football only: manually add 1 extra minute. */
   const addMinute = () => {
     const next = elapsed + 60;
     initRef.current = next;
     startWallRef.current = isRunning ? Date.now() - next * 1000 : null;
     setElapsed(next);
     if (stoppageBase === null) {
-      // First +1 press — anchor stoppage to the current whole minute
       setStoppageBase(Math.floor(elapsed / 60));
       setStoppageCount(1);
     } else {
@@ -107,17 +111,32 @@ function useMatchStopwatch(isRunning: boolean, matchId: number, initialMinute: s
   // ── Display ──────────────────────────────────────────────────────────────
   const totalMin = Math.floor(elapsed / 60);
   const ss = String(elapsed % 60).padStart(2, "0");
-  const isStoppage = stoppageBase !== null;
+
+  // Futsal: auto-stoppage once past the half boundary
+  const futsalBoundary = isFutsal
+    ? FUTSAL_BOUNDARIES[Math.min(halfPhase, FUTSAL_BOUNDARIES.length - 1)]
+    : undefined;
+  const isAutoStoppage = futsalBoundary !== undefined && elapsed >= futsalBoundary;
 
   let display: string;
   let minuteStr: string;
-  if (isStoppage && stoppageBase !== null) {
+
+  if (isAutoStoppage && futsalBoundary !== undefined) {
+    const extraSecs = elapsed - futsalBoundary;
+    const extraMin = Math.floor(extraSecs / 60);
+    const base = Math.floor(futsalBoundary / 60);
+    display = `${base}+${extraMin}:${String(extraSecs % 60).padStart(2, "0")}`;
+    minuteStr = `${base}+${extraMin}`;
+  } else if (!isFutsal && stoppageBase !== null) {
+    // Football manual stoppage
     display = `${stoppageBase}+${stoppageCount}:${ss}`;
     minuteStr = `${stoppageBase}+${stoppageCount}`;
   } else {
     display = `${String(totalMin).padStart(2, "0")}:${ss}`;
     minuteStr = String(totalMin + 1);
   }
+
+  const isStoppage = isAutoStoppage || (!isFutsal && stoppageBase !== null);
 
   return { display, minuteStr, isStoppage, reset, addMinute };
 }
@@ -133,7 +152,7 @@ const EVENT_ICON_MAP: Record<string, string> = {
   penalty_awarded: "P!", penalty_goal: "P⚽", penalty_missed: "P✗",
   ten_meter_goal: "10⚽", ten_meter_missed: "10✗", foul: "🚫",
   substitution: "↕", mvp: "⭐",
-  var_review: "📺", var_goal_cancelled: "📺❌",
+  var_review: "📺", var_award_goal: "📺⚽", var_no_goal: "📺❌", var_award_foul: "📺🚫", var_award_penalty: "📺P",
 };
 
 function EventModal({
@@ -148,11 +167,14 @@ function EventModal({
   isPending: boolean;
 }) {
   const isMvp = modal.type === "mvp";
-  const isCommentary = modal.type === "penalty_awarded"; // reuse for commentary edge cases
+  const isCommentary = modal.type === "penalty_awarded";
   const isGoal = modal.type === "goal" || modal.type === "penalty_goal" || modal.type === "ten_meter_goal";
   const isSub = modal.type === "substitution";
-  const isVAR = modal.type === "var_review" || modal.type === "var_goal_cancelled";
-  const noPlayerRequired = isCommentary || isVAR;
+  // VAR events that don't need a player (team only). var_award_penalty shows player picker.
+  const isVARNoPlayer = ["var_review", "var_award_goal", "var_no_goal", "var_award_foul"].includes(modal.type);
+  const isVARPenalty = modal.type === "var_award_penalty";
+  const isVAR = isVARNoPlayer || isVARPenalty;
+  const noPlayerRequired = isCommentary || isVARNoPlayer;
 
   const [teamSide, setTeamSide] = useState<"home" | "away">("home");
   const [minute, setMinute] = useState(defaultMinute);
@@ -227,38 +249,40 @@ function EventModal({
             ))}
           </div>
 
-          {/* Player */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-[10px] font-bold text-white/50 uppercase">
-                {isSub ? "Player In *" : isMvp ? "Player *" : "Player *"}
-              </label>
-              {hasLineup && (
-                <button type="button" onClick={() => { setUseLineup(u => !u); setLineupId(0); setPlayerName(""); setPlayerNumber(""); }}
-                  className="text-[10px] font-semibold text-primary">
-                  {useLineup ? "Manual" : "From lineup"}
-                </button>
+          {/* Player — hidden for VAR-no-player events */}
+          {!isVARNoPlayer && (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[10px] font-bold text-white/50 uppercase">
+                  {isSub ? "Player In *" : isMvp ? "Player *" : isVARPenalty ? "Player (optional)" : "Player *"}
+                </label>
+                {hasLineup && (
+                  <button type="button" onClick={() => { setUseLineup(u => !u); setLineupId(0); setPlayerName(""); setPlayerNumber(""); }}
+                    className="text-[10px] font-semibold text-primary">
+                    {useLineup ? "Manual" : "From lineup"}
+                  </button>
+                )}
+              </div>
+              {useLineup && hasLineup ? (
+                <select value={lineupId}
+                  onChange={e => pickPlayer(Number(e.target.value))}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-primary">
+                  <option value={0}>— Select player —</option>
+                  {lineupSide.map(p => (
+                    <option key={p.id} value={p.id}>#{p.playerNumber} {p.playerName}{p.position ? ` (${p.position})` : ""}</option>
+                  ))}
+                </select>
+              ) : (
+                <div className="flex gap-2">
+                  <input value={playerNumber} onChange={e => setPlayerNumber(e.target.value)}
+                    placeholder="#" className="w-16 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white text-center focus:outline-none focus:border-primary" />
+                  <input value={playerName} onChange={e => setPlayerName(e.target.value)}
+                    placeholder="Player name" required={!isVARPenalty}
+                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-primary" />
+                </div>
               )}
             </div>
-            {useLineup && hasLineup ? (
-              <select value={lineupId}
-                onChange={e => pickPlayer(Number(e.target.value))}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-primary">
-                <option value={0}>— Select player —</option>
-                {lineupSide.map(p => (
-                  <option key={p.id} value={p.id}>#{p.playerNumber} {p.playerName}{p.position ? ` (${p.position})` : ""}</option>
-                ))}
-              </select>
-            ) : (
-              <div className="flex gap-2">
-                <input value={playerNumber} onChange={e => setPlayerNumber(e.target.value)}
-                  placeholder="#" className="w-16 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white text-center focus:outline-none focus:border-primary" />
-                <input value={playerName} onChange={e => setPlayerName(e.target.value)}
-                  placeholder="Player name" required
-                  className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-primary" />
-              </div>
-            )}
-          </div>
+          )}
 
           {/* Sub-out player */}
           {isSub && (
@@ -345,7 +369,10 @@ const LOG_ICONS: Record<string, { icon: string; label: string; color: string }> 
   substitution:       { icon: "↕",    label: "Sub",               color: "text-purple-400" },
   mvp:                { icon: "⭐",   label: "MVP",               color: "text-amber-400" },
   var_review:         { icon: "📺",   label: "VAR Review",        color: "text-cyan-400" },
-  var_goal_cancelled: { icon: "📺❌", label: "VAR: Goal Cancelled", color: "text-red-400" },
+  var_award_goal:     { icon: "📺⚽", label: "VAR: Goal Awarded",  color: "text-emerald-400" },
+  var_no_goal:        { icon: "📺❌", label: "VAR: No Goal",       color: "text-red-400" },
+  var_award_foul:     { icon: "📺🚫", label: "VAR: Foul Awarded",  color: "text-orange-400" },
+  var_award_penalty:  { icon: "📺P",  label: "VAR: Penalty",       color: "text-blue-400" },
 };
 
 /* ─── main component ─── */
@@ -393,9 +420,6 @@ export function EventsTab() {
   const [editName, setEditName] = useState("");
   const [editNumber, setEditNumber] = useState("");
 
-  // VAR decision state
-  const [varDecisionEventId, setVarDecisionEventId] = useState<number | null>(null);
-
   const invalidateEvents = useCallback(() =>
     qc.invalidateQueries({ queryKey: getListMatchEventsQueryKey(selectedMatchId) }),
     [qc, selectedMatchId]);
@@ -414,7 +438,8 @@ export function EventsTab() {
   const { display: watchDisplay, minuteStr, isStoppage, reset: resetWatch, addMinute } = useMatchStopwatch(
     watchRunning,
     selectedMatchId,
-    match?.minute
+    match?.minute,
+    isFutsal
   );
 
   // Auto-save the running minute to DB every 30 s so the public site stays in sync
@@ -462,9 +487,8 @@ export function EventsTab() {
   };
 
   const handleSecondHalf = () => {
-    // Football halves are 45 min each; futsal halves are 20 min each
     const halfDuration = match?.sport === "futsal" ? 20 : 45;
-    resetWatch(halfDuration);
+    resetWatch(halfDuration, 1); // phase 1 = 2nd half (for futsal auto-stoppage at 40')
     updateMatch.mutate(
       { id: selectedMatchId, data: { status: "live", minute: String(halfDuration) } },
       { onSuccess: invalidateMatches }
@@ -527,32 +551,6 @@ export function EventsTab() {
   const handleDelete = (eventId: number) =>
     deleteEvent.mutate({ id: selectedMatchId, eventId }, { onSuccess: invalidateEvents });
 
-  const handleVarDecision = (eventId: number, outcome: string) => {
-    const event = (events ?? []).find(e => e.id === eventId);
-    if (!event) return;
-    updateEvent.mutate(
-      {
-        id: selectedMatchId,
-        eventId,
-        data: {
-          type: event.type as Parameters<typeof updateEvent.mutate>[0]["data"]["type"],
-          minute: event.minute,
-          teamId: event.teamId,
-          playerName: event.playerName ?? "VAR",
-          playerNumber: event.playerNumber ?? undefined,
-          assistPlayerName: event.assistPlayerName ?? undefined,
-          description: outcome,
-        },
-      },
-      {
-        onSuccess: () => {
-          setVarDecisionEventId(null);
-          invalidateEvents();
-        },
-      }
-    );
-  };
-
   const handleEditStart = (event: { id: number; playerName?: string | null; playerNumber?: string | null }) => {
     setEditingEventId(event.id);
     setEditName(event.playerName ?? "");
@@ -599,8 +597,11 @@ export function EventsTab() {
     { type: "ten_meter_goal",     label: "10m Pen Goal",     bg: "bg-[#0a4a3a] hover:bg-[#0c5845]", icon: "10⚽", futsalOnly: true },
     { type: "ten_meter_missed",   label: "10m Pen Missed",   bg: "bg-[#4a1a1a] hover:bg-[#5a2020]", icon: "__pen_missed__", futsalOnly: true },
     { type: "foul",               label: "Foul",             bg: "bg-[#4a2e00] hover:bg-[#5c3800]", icon: "🚫",  futsalOnly: true },
-    { type: "var_review",         label: "VAR Review",       bg: "bg-[#0a2a3a] hover:bg-[#0c3348]", icon: "📺" },
-    { type: "var_goal_cancelled", label: "VAR: Goal Off",    bg: "bg-[#3a1a1a] hover:bg-[#4a2020]", icon: "📺❌" },
+    { type: "var_review",         label: "VAR Review",       bg: "bg-[#0a2a3a] hover:bg-[#0c3348]", icon: "__var__" },
+    { type: "var_award_goal",     label: "VAR: Goal",        bg: "bg-[#1a4a2e] hover:bg-[#205838]", icon: "__var__" },
+    { type: "var_no_goal",        label: "VAR: No Goal",     bg: "bg-[#3a1a1a] hover:bg-[#4a2020]", icon: "__var__" },
+    { type: "var_award_foul",     label: "VAR: Foul",        bg: "bg-[#4a2e00] hover:bg-[#5c3800]", icon: "__var__" },
+    { type: "var_award_penalty",  label: "VAR: Penalty",     bg: "bg-[#0d3060] hover:bg-[#104080]", icon: "__var__" },
   ] as Tile[]).filter(t => !t.futsalOnly || isFutsal);
 
   return (
@@ -680,13 +681,15 @@ export function EventsTab() {
                         )}>
                         {watchDisplay}
                       </button>
-                      {/* +1 min button */}
-                      <button
-                        onClick={addMinute}
-                        title="Add 1 minute (stoppage time)"
-                        className="flex items-center gap-0.5 bg-amber-500/20 hover:bg-amber-500/35 border border-amber-500/30 text-amber-400 font-black text-[11px] px-2 py-1 rounded-lg transition-colors">
-                        +1<span className="text-[9px] font-semibold opacity-70 ml-0.5">min</span>
-                      </button>
+                      {/* +1 min button — football only; futsal auto-runs extra time */}
+                      {!isFutsal && (
+                        <button
+                          onClick={addMinute}
+                          title="Add 1 minute (stoppage time)"
+                          className="flex items-center gap-0.5 bg-amber-500/20 hover:bg-amber-500/35 border border-amber-500/30 text-amber-400 font-black text-[11px] px-2 py-1 rounded-lg transition-colors">
+                          +1<span className="text-[9px] font-semibold opacity-70 ml-0.5">min</span>
+                        </button>
+                      )}
                       {/* Reset */}
                       <button
                         onClick={handleResetWatch}
@@ -837,6 +840,8 @@ export function EventsTab() {
                     ? <PenaltyTileIcon outcome="goal" />
                     : tile.icon === "__pen_missed__"
                     ? <PenaltyTileIcon outcome="missed" />
+                    : tile.icon === "__var__"
+                    ? <img src="/var-icon.png" width="36" height="28" style={{ filter: "brightness(0) invert(1)", opacity: 0.85 }} />
                     : <span className="text-2xl leading-none">{tile.icon}</span>}
                   <span className="text-xs font-black text-white tracking-wide">{tile.label}</span>
                 </button>
@@ -960,39 +965,6 @@ export function EventsTab() {
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               </div>
-                              {/* ── VAR decision panel ── */}
-                              {event.type === "var_review" && (
-                                varDecisionEventId === event.id ? (
-                                  <div className="ml-9 space-y-1.5">
-                                    <p className="text-[9px] font-black text-cyan-400/70 uppercase tracking-widest">VAR Decision</p>
-                                    <div className="grid grid-cols-2 gap-1.5">
-                                      {VAR_OUTCOMES.map(o => (
-                                        <button
-                                          key={o.value}
-                                          onClick={() => handleVarDecision(event.id, o.value)}
-                                          disabled={updateEvent.isPending}
-                                          className="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-2 py-1.5 text-[11px] font-semibold text-white transition-colors disabled:opacity-50">
-                                          <span>{o.emoji}</span>
-                                          <span>{o.label}</span>
-                                        </button>
-                                      ))}
-                                    </div>
-                                    <button
-                                      onClick={() => setVarDecisionEventId(null)}
-                                      className="text-[10px] text-white/30 hover:text-white/50 transition-colors">
-                                      Cancel
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <div className="ml-9">
-                                    <button
-                                      onClick={() => setVarDecisionEventId(event.id)}
-                                      className="text-[10px] font-black text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-lg px-2.5 py-1 transition-colors">
-                                      📺 Set VAR Decision
-                                    </button>
-                                  </div>
-                                )
-                              )}
                             </div>
                           )}
                         </div>
