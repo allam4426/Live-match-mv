@@ -58,6 +58,10 @@ localPort = 8081
 externalPort = 8081
 
 [[ports]]
+localPort = 8082
+externalPort = 3001
+
+[[ports]]
 localPort = 23715
 externalPort = 3000
 
@@ -72,3 +76,7 @@ build = ["bash", "-c", "export PATH=/home/runner/.local/bin:$PATH && pnpm instal
 VAPID_CONTACT = "mailto:admin@livematchmv.online"
 VAPID_PRIVATE_KEY = "WuGHbgQ_0aM346ty-ZYclDlPL_TWeg8F7mU-mfNeG7Q"
 VAPID_PUBLIC_KEY = "BK3_BS8uucCIWNP4mWeVc1n038gxuGco-Azyfj-QV3CO9u4Zf4xjBmItNYj7Zws4eLPr93cy7LtH1Ow-AORpzD8"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 120000

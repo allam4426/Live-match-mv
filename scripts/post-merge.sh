@@ -1,4 +1,8 @@
 #!/bin/bash
 set -e
-pnpm install --frozen-lockfile
-pnpm --filter db push
+
+# Install / sync all workspace dependencies
+pnpm install
+
+# Push DB schema changes (idempotent — ADD COLUMN IF NOT EXISTS safe)
+pnpm --filter @workspace/db run push-force
