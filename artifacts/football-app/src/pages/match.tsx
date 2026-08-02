@@ -105,7 +105,7 @@ function useLiveStopwatch(
     if (!isLive) return null;
     const parsed = parseSecs(minute);
     if (parsed === null) return null;
-    // If we have a cached anchor whose base matches, resume from the correct elapsed time
+    // On re-mount (after navigation) restore elapsed time from the module-level cache
     if (cacheKey) {
       const cached = _stopwatchAnchors.get(cacheKey);
       if (cached && cached.base === parsed) {
@@ -118,44 +118,46 @@ function useLiveStopwatch(
   const anchorRef = useRef<{ base: number; time: number } | null>(null);
   const boundaryRef = useRef<number>(Infinity);
 
-  // Initialise anchorRef from cache synchronously on first render so the
-  // interval effect starts with the right anchor even before the effect fires.
-  if (anchorRef.current === null && isLive) {
-    const parsed = parseSecs(minute);
-    if (parsed !== null) {
-      const cached = cacheKey ? _stopwatchAnchors.get(cacheKey) : undefined;
-      if (cached && cached.base === parsed) {
-        anchorRef.current = cached;
-      } else {
-        const anchor = { base: parsed, time: Date.now() };
-        anchorRef.current = anchor;
-        if (cacheKey) _stopwatchAnchors.set(cacheKey, anchor);
-      }
-    }
-  }
-
   useEffect(() => {
-    if (!isLive) { setSecs(null); anchorRef.current = null; return; }
-    const parsed = parseSecs(minute);
-    if (parsed !== null) {
-      // If minute already contains "+" (e.g. "40+2"), we are in stoppage time.
-      // Use only the base minute for boundary so the extra display works correctly.
-      if (minute && minute.includes("+")) {
-        const baseMin = parseInt(minute.split("+")[0], 10);
-        boundaryRef.current = isNaN(baseMin) ? getRegBoundarySecs(parsed, sport) : baseMin * 60;
-      } else {
-        boundaryRef.current = getRegBoundarySecs(parsed, sport);
-      }
+    if (!isLive) {
+      setSecs(null);
+      anchorRef.current = null;
+      return;
+    }
 
-      // Only reset anchor when the server has actually pushed a new minute value.
-      // If the cached anchor has the same base the clock was already running — keep it.
-      const existing = anchorRef.current;
-      if (!existing || existing.base !== parsed) {
-        const anchor = { base: parsed, time: Date.now() };
-        anchorRef.current = anchor;
-        if (cacheKey) _stopwatchAnchors.set(cacheKey, anchor);
-        setSecs(parsed);
-      }
+    const parsed = parseSecs(minute);
+    if (parsed === null) return;
+
+    // Boundary logic (stoppage time display)
+    if (minute && minute.includes("+")) {
+      const baseMin = parseInt(minute.split("+")[0], 10);
+      boundaryRef.current = isNaN(baseMin) ? getRegBoundarySecs(parsed, sport) : baseMin * 60;
+    } else {
+      boundaryRef.current = getRegBoundarySecs(parsed, sport);
+    }
+
+    const existing = anchorRef.current;
+
+    if (existing && existing.base === parsed) {
+      // Same minute from server — anchor is still valid.
+      // secs may be null if the component just mounted while isLive was false
+      // (data arrived after initial render); recover from cache or anchor.
+      setSecs(prev => {
+        if (prev !== null) return prev; // interval is already running
+        return existing.base + Math.floor((Date.now() - existing.time) / 1000);
+      });
+    } else {
+      // Minute changed (server update) OR first time live this mount.
+      // Check module-level cache so navigation doesn't reset the clock.
+      const cached = cacheKey ? _stopwatchAnchors.get(cacheKey) : undefined;
+      const anchor =
+        cached && cached.base === parsed
+          ? cached // reuse — keeps elapsed time across navigation
+          : { base: parsed, time: Date.now() }; // new anchor
+
+      anchorRef.current = anchor;
+      if (cacheKey) _stopwatchAnchors.set(cacheKey, anchor);
+      setSecs(anchor.base + Math.floor((Date.now() - anchor.time) / 1000));
     }
   }, [minute, isLive, sport]); // eslint-disable-line react-hooks/exhaustive-deps
 
