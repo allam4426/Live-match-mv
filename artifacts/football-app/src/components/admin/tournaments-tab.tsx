@@ -112,15 +112,16 @@ function ZoneEditor({ zones, onChange }: { zones: QualificationZone[]; onChange:
           </select>
         </div>
         <div>
-          <label className="text-[9px] text-muted-foreground uppercase block mb-0.5">Label (shown in legend)</label>
+          <label className="text-[9px] text-muted-foreground uppercase block mb-0.5">Label (shown in legend) *</label>
           <input value={newZone.label}
             onChange={e => setNewZone(z => ({ ...z, label: e.target.value }))}
-            placeholder="e.g. Direct to Final" className="admin-input text-xs py-1" />
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addZone(); } }}
+            placeholder="e.g. Champions, Relegated…" className="admin-input text-xs py-1" />
         </div>
         <button type="button" onClick={addZone}
-          disabled={!newZone.label || !newZone.fromPos || !newZone.toPos}
+          disabled={!newZone.label.trim() || !newZone.fromPos || !newZone.toPos}
           className="w-full flex items-center justify-center gap-1 bg-muted border border-border rounded-lg py-1.5 text-[11px] font-semibold text-foreground disabled:opacity-40 hover:bg-muted/60 transition-colors">
-          <Plus className="w-3 h-3" /> Add Zone
+          <Plus className="w-3 h-3" /> Add Zone{!newZone.label.trim() && " (fill label first)"}
         </button>
       </div>
     </div>
@@ -147,7 +148,7 @@ export function TournamentsTab() {
     return {
       ...rest,
       ...(sgf ? { singleGroupFormat: sgf as "bye_semi" | "top2_final" } : {}),
-      ...(qualificationZones.length > 0 ? { qualificationZones } : {}),
+      qualificationZones: qualificationZones.length > 0 ? qualificationZones : [],
     };
   };
 
