@@ -66,9 +66,9 @@ type StopwatchResult = { main: string; extra: string | null } | null;
 
 /**
  * Module-level anchor cache — survives component unmount/remount (navigation).
- * Key: matchId. Value: the anchor set when the server last updated the minute.
+ * Key: matchId. Value: { base: total seconds at last server save, wallTime: Date.now() at that save }
  */
-const _stopwatchAnchors = new Map<string, { base: number; time: number }>();
+const _stopwatchAnchors = new Map<string, { base: number; wallTime: number }>();
 
 /** Returns the regulation cap in seconds for the current half, based on starting minute and sport. */
 function getRegBoundarySecs(startSecs: number, sport: string | null | undefined): number {
@@ -100,71 +100,52 @@ function useLiveStopwatch(
   sport?: string | null,
 ): StopwatchResult {
   const cacheKey = matchId != null ? String(matchId) : null;
+  // anchorRef holds the fixed reference point; seconds are computed from it at render time.
+  const anchorRef = useRef<{ base: number; wallTime: number } | null>(null);
+  // tick is a counter incremented every second — its only job is to trigger re-renders.
+  const [tick, setTick] = useState(0);
 
-  const [secs, setSecs] = useState<number | null>(() => {
-    if (!isLive) return null;
-    const parsed = parseSecs(minute);
-    if (parsed === null) return null;
-    // On re-mount (after navigation) restore elapsed time from the module-level cache
-    if (cacheKey) {
-      const cached = _stopwatchAnchors.get(cacheKey);
-      if (cached && cached.base === parsed) {
-        return cached.base + Math.floor((Date.now() - cached.time) / 1000);
-      }
-    }
-    return parsed;
-  });
-
-  const anchorRef = useRef<{ base: number; time: number } | null>(null);
-
+  // Set / restore anchor whenever isLive or minute changes.
   useEffect(() => {
     if (!isLive) {
-      setSecs(null);
       anchorRef.current = null;
       return;
     }
-
     const parsed = parseSecs(minute);
-    if (parsed === null) return;
-
-    const existing = anchorRef.current;
-
-    if (existing && existing.base === parsed) {
-      // Same minute from server — anchor still valid.
-      // If secs is null (component mounted while isLive was false), recover now.
-      setSecs(prev => {
-        if (prev !== null) return prev;
-        return existing.base + Math.floor((Date.now() - existing.time) / 1000);
-      });
-    } else {
-      // Minute changed (server update) OR first mount.
-      // Check module-level cache so navigating back doesn't reset the clock.
-      const cached = cacheKey ? _stopwatchAnchors.get(cacheKey) : undefined;
-      const anchor =
-        cached && cached.base === parsed
-          ? cached
-          : { base: parsed, time: Date.now() };
-
-      anchorRef.current = anchor;
-      if (cacheKey) _stopwatchAnchors.set(cacheKey, anchor);
-      setSecs(anchor.base + Math.floor((Date.now() - anchor.time) / 1000));
+    if (parsed === null) {
+      anchorRef.current = null;
+      return;
     }
-  }, [minute, isLive, sport]); // eslint-disable-line react-hooks/exhaustive-deps
+    // If anchor already matches the current minute, leave it alone (keeps elapsed time).
+    if (anchorRef.current && anchorRef.current.base === parsed) return;
 
+    // New minute (server update or first mount). Restore from cache if possible so
+    // navigating back doesn't reset the clock.
+    const cached = cacheKey ? _stopwatchAnchors.get(cacheKey) : undefined;
+    const anchor =
+      cached && cached.base === parsed
+        ? cached
+        : { base: parsed, wallTime: Date.now() };
+
+    anchorRef.current = anchor;
+    if (cacheKey) _stopwatchAnchors.set(cacheKey, anchor);
+    setTick(t => t + 1); // force a render so the new anchor is visible immediately
+  }, [minute, isLive]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Ticker — increments tick every second while live, causing a re-render each time.
+  // Seconds are computed fresh from anchorRef at render time — no stale-state issues.
   useEffect(() => {
-    if (!isLive || secs === null) return;
-    const id = setInterval(() => {
-      if (!anchorRef.current) return;
-      const drift = Math.floor((Date.now() - anchorRef.current.time) / 1000);
-      setSecs(anchorRef.current.base + drift);
-    }, 1000);
+    if (!isLive) return;
+    const id = setInterval(() => setTick(t => t + 1), 1000);
     return () => clearInterval(id);
-  }, [isLive, secs === null]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isLive]);
 
-  if (secs === null) return null;
+  if (!isLive || !anchorRef.current) return null;
 
-  // Boundary is computed directly from `minute` prop every render — no ref needed.
-  // This avoids the timing race where a ref set inside an effect is read too late.
+  // Compute current elapsed seconds directly from the anchor (always fresh).
+  const secs = anchorRef.current.base + Math.floor((Date.now() - anchorRef.current.wallTime) / 1000);
+
+  // Boundary derived from the minute prop every render — no ref, no timing race.
   const boundary = (() => {
     if (!minute) return Infinity;
     if (minute.includes("+")) {
