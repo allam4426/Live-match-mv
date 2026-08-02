@@ -116,7 +116,6 @@ function useLiveStopwatch(
   });
 
   const anchorRef = useRef<{ base: number; time: number } | null>(null);
-  const boundaryRef = useRef<number>(Infinity);
 
   useEffect(() => {
     if (!isLive) {
@@ -128,32 +127,23 @@ function useLiveStopwatch(
     const parsed = parseSecs(minute);
     if (parsed === null) return;
 
-    // Boundary logic (stoppage time display)
-    if (minute && minute.includes("+")) {
-      const baseMin = parseInt(minute.split("+")[0], 10);
-      boundaryRef.current = isNaN(baseMin) ? getRegBoundarySecs(parsed, sport) : baseMin * 60;
-    } else {
-      boundaryRef.current = getRegBoundarySecs(parsed, sport);
-    }
-
     const existing = anchorRef.current;
 
     if (existing && existing.base === parsed) {
-      // Same minute from server — anchor is still valid.
-      // secs may be null if the component just mounted while isLive was false
-      // (data arrived after initial render); recover from cache or anchor.
+      // Same minute from server — anchor still valid.
+      // If secs is null (component mounted while isLive was false), recover now.
       setSecs(prev => {
-        if (prev !== null) return prev; // interval is already running
+        if (prev !== null) return prev;
         return existing.base + Math.floor((Date.now() - existing.time) / 1000);
       });
     } else {
-      // Minute changed (server update) OR first time live this mount.
-      // Check module-level cache so navigation doesn't reset the clock.
+      // Minute changed (server update) OR first mount.
+      // Check module-level cache so navigating back doesn't reset the clock.
       const cached = cacheKey ? _stopwatchAnchors.get(cacheKey) : undefined;
       const anchor =
         cached && cached.base === parsed
-          ? cached // reuse — keeps elapsed time across navigation
-          : { base: parsed, time: Date.now() }; // new anchor
+          ? cached
+          : { base: parsed, time: Date.now() };
 
       anchorRef.current = anchor;
       if (cacheKey) _stopwatchAnchors.set(cacheKey, anchor);
@@ -170,9 +160,20 @@ function useLiveStopwatch(
     }, 1000);
     return () => clearInterval(id);
   }, [isLive, secs === null]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (secs === null) return null;
 
-  const boundary = boundaryRef.current;
+  // Boundary is computed directly from `minute` prop every render — no ref needed.
+  // This avoids the timing race where a ref set inside an effect is read too late.
+  const boundary = (() => {
+    if (!minute) return Infinity;
+    if (minute.includes("+")) {
+      const baseMin = parseInt(minute.split("+")[0], 10);
+      return isNaN(baseMin) ? Infinity : baseMin * 60;
+    }
+    return getRegBoundarySecs(parseSecs(minute) ?? 0, sport);
+  })();
+
   const cappedSecs = Math.min(secs, boundary);
   const mm = Math.floor(cappedSecs / 60);
   const ss = cappedSecs % 60;
