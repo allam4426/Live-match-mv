@@ -1581,6 +1581,8 @@ components:
           type: integer
         awayYellowCards:
           type: integer
+        clockAnchorMs:
+          type: ["integer", "null"]
 
     MatchDetail:
       type: object
@@ -1621,6 +1623,8 @@ components:
           type: ["string", "null"]
         matchGroup:
           type: ["string", "null"]
+        clockAnchorMs:
+          type: ["integer", "null"]
         streams:
           type: array
           items:
@@ -1695,6 +1699,8 @@ components:
           type: string
         matchGroup:
           type: ["string", "null"]
+        clockAnchorMs:
+          type: ["integer", "null"]
 
     MatchEvent:
       type: object

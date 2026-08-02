@@ -731,7 +731,8 @@ export const GetTournamentMatchesResponseItem = zod.object({
   "homeRedCards": zod.number(),
   "awayRedCards": zod.number(),
   "homeYellowCards": zod.number(),
-  "awayYellowCards": zod.number()
+  "awayYellowCards": zod.number(),
+  "clockAnchorMs": zod.number().nullish()
 })
 export const GetTournamentMatchesResponse = zod.array(GetTournamentMatchesResponseItem)
 
@@ -873,7 +874,8 @@ export const ListMatchesResponseItem = zod.object({
   "homeRedCards": zod.number(),
   "awayRedCards": zod.number(),
   "homeYellowCards": zod.number(),
-  "awayYellowCards": zod.number()
+  "awayYellowCards": zod.number(),
+  "clockAnchorMs": zod.number().nullish()
 })
 export const ListMatchesResponse = zod.array(ListMatchesResponseItem)
 
@@ -940,7 +942,8 @@ export const ListLiveMatchesResponseItem = zod.object({
   "homeRedCards": zod.number(),
   "awayRedCards": zod.number(),
   "homeYellowCards": zod.number(),
-  "awayYellowCards": zod.number()
+  "awayYellowCards": zod.number(),
+  "clockAnchorMs": zod.number().nullish()
 })
 export const ListLiveMatchesResponse = zod.array(ListLiveMatchesResponseItem)
 
@@ -983,6 +986,7 @@ export const GetMatchResponse = zod.object({
   "tournamentId": zod.number().nullish(),
   "venue": zod.string().nullish(),
   "matchGroup": zod.string().nullish(),
+  "clockAnchorMs": zod.number().nullish(),
   "streams": zod.array(zod.object({
   "id": zod.number(),
   "matchId": zod.number(),
@@ -995,7 +999,7 @@ export const GetMatchResponse = zod.object({
   "events": zod.array(zod.object({
   "id": zod.number(),
   "matchId": zod.number(),
-  "type": zod.enum(['goal', 'yellow_card', 'red_card', 'second_yellow_red', 'own_goal', 'penalty_awarded', 'penalty_goal', 'penalty_missed', 'ten_meter_goal', 'ten_meter_missed', 'foul', 'substitution', 'mvp', 'var_review', 'var_award_goal', 'var_no_goal', 'var_award_foul', 'var_award_penalty']),
+  "type": zod.enum(['goal', 'yellow_card', 'red_card', 'second_yellow_red', 'own_goal', 'penalty_awarded', 'penalty_goal', 'penalty_missed', 'ten_meter_goal', 'foul', 'substitution', 'mvp']),
   "minute": zod.string(),
   "teamId": zod.number(),
   "playerName": zod.string(),
@@ -1025,7 +1029,8 @@ export const UpdateMatchBody = zod.object({
   "awayTeamId": zod.number().optional(),
   "tournamentId": zod.number().nullish(),
   "competition": zod.string().optional(),
-  "matchGroup": zod.string().nullish()
+  "matchGroup": zod.string().nullish(),
+  "clockAnchorMs": zod.number().nullish()
 })
 
 export const UpdateMatchResponse = zod.object({
@@ -1062,7 +1067,8 @@ export const UpdateMatchResponse = zod.object({
   "homeRedCards": zod.number(),
   "awayRedCards": zod.number(),
   "homeYellowCards": zod.number(),
-  "awayYellowCards": zod.number()
+  "awayYellowCards": zod.number(),
+  "clockAnchorMs": zod.number().nullish()
 })
 
 
@@ -1084,7 +1090,7 @@ export const ListMatchEventsParams = zod.object({
 export const ListMatchEventsResponseItem = zod.object({
   "id": zod.number(),
   "matchId": zod.number(),
-  "type": zod.enum(['goal', 'yellow_card', 'red_card', 'second_yellow_red', 'own_goal', 'penalty_awarded', 'penalty_goal', 'penalty_missed', 'ten_meter_goal', 'ten_meter_missed', 'foul', 'substitution', 'mvp', 'var_review', 'var_award_goal', 'var_no_goal', 'var_award_foul', 'var_award_penalty']),
+  "type": zod.enum(['goal', 'yellow_card', 'red_card', 'second_yellow_red', 'own_goal', 'penalty_awarded', 'penalty_goal', 'penalty_missed', 'ten_meter_goal', 'foul', 'substitution', 'mvp']),
   "minute": zod.string(),
   "teamId": zod.number(),
   "playerName": zod.string(),
@@ -1103,7 +1109,7 @@ export const CreateMatchEventParams = zod.object({
 })
 
 export const CreateMatchEventBody = zod.object({
-  "type": zod.enum(['goal', 'yellow_card', 'red_card', 'second_yellow_red', 'own_goal', 'penalty_awarded', 'penalty_goal', 'penalty_missed', 'ten_meter_goal', 'ten_meter_missed', 'foul', 'substitution', 'mvp', 'var_review', 'var_award_goal', 'var_no_goal', 'var_award_foul', 'var_award_penalty']),
+  "type": zod.enum(['goal', 'yellow_card', 'red_card', 'second_yellow_red', 'own_goal', 'penalty_awarded', 'penalty_goal', 'penalty_missed', 'ten_meter_goal', 'foul', 'substitution', 'mvp']),
   "minute": zod.string(),
   "teamId": zod.number(),
   "playerName": zod.string(),
@@ -1122,7 +1128,7 @@ export const UpdateMatchEventParams = zod.object({
 })
 
 export const UpdateMatchEventBody = zod.object({
-  "type": zod.enum(['goal', 'yellow_card', 'red_card', 'second_yellow_red', 'own_goal', 'penalty_awarded', 'penalty_goal', 'penalty_missed', 'ten_meter_goal', 'ten_meter_missed', 'foul', 'substitution', 'mvp', 'var_review', 'var_award_goal', 'var_no_goal', 'var_award_foul', 'var_award_penalty']),
+  "type": zod.enum(['goal', 'yellow_card', 'red_card', 'second_yellow_red', 'own_goal', 'penalty_awarded', 'penalty_goal', 'penalty_missed', 'ten_meter_goal', 'foul', 'substitution', 'mvp']),
   "minute": zod.string(),
   "teamId": zod.number(),
   "playerName": zod.string(),
@@ -1134,7 +1140,7 @@ export const UpdateMatchEventBody = zod.object({
 export const UpdateMatchEventResponse = zod.object({
   "id": zod.number(),
   "matchId": zod.number(),
-  "type": zod.enum(['goal', 'yellow_card', 'red_card', 'second_yellow_red', 'own_goal', 'penalty_awarded', 'penalty_goal', 'penalty_missed', 'ten_meter_goal', 'ten_meter_missed', 'foul', 'substitution', 'mvp', 'var_review', 'var_award_goal', 'var_no_goal', 'var_award_foul', 'var_award_penalty']),
+  "type": zod.enum(['goal', 'yellow_card', 'red_card', 'second_yellow_red', 'own_goal', 'penalty_awarded', 'penalty_goal', 'penalty_missed', 'ten_meter_goal', 'foul', 'substitution', 'mvp']),
   "minute": zod.string(),
   "teamId": zod.number(),
   "playerName": zod.string(),

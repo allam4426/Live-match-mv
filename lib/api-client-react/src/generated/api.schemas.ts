@@ -396,6 +396,8 @@ export interface Match {
   awayRedCards: number;
   homeYellowCards: number;
   awayYellowCards: number;
+  /** @nullable */
+  clockAnchorMs?: number | null;
 }
 
 export type MatchDetailStatus = typeof MatchDetailStatus[keyof typeof MatchDetailStatus];
@@ -491,6 +493,8 @@ export interface MatchDetail {
   venue?: string | null;
   /** @nullable */
   matchGroup?: string | null;
+  /** @nullable */
+  clockAnchorMs?: number | null;
   streams: Stream[];
   events: MatchEvent[];
 }
@@ -557,6 +561,8 @@ export interface MatchUpdate {
   competition?: string;
   /** @nullable */
   matchGroup?: string | null;
+  /** @nullable */
+  clockAnchorMs?: number | null;
 }
 
 export type MatchEventInputType = typeof MatchEventInputType[keyof typeof MatchEventInputType];

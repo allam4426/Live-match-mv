@@ -35,4 +35,6 @@ export interface Match {
   awayRedCards: number;
   homeYellowCards: number;
   awayYellowCards: number;
+  /** @nullable */
+  clockAnchorMs?: number | null;
 }

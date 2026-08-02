@@ -22,4 +22,6 @@ export interface MatchUpdate {
   competition?: string;
   /** @nullable */
   matchGroup?: string | null;
+  /** @nullable */
+  clockAnchorMs?: number | null;
 }

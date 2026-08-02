@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, boolean, timestamp, bigint } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { teamsTable } from "./teams";
@@ -20,6 +20,7 @@ export const matchesTable = pgTable("matches", {
   tournamentId: integer("tournament_id").references(() => tournamentsTable.id, { onDelete: "set null" }),
   venue: text("venue"),
   matchGroup: text("match_group"),
+  clockAnchorMs: bigint("clock_anchor_ms", { mode: "number" }),
 });
 
 export const insertMatchSchema = createInsertSchema(matchesTable).omit({ id: true });

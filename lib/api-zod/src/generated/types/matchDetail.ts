@@ -33,6 +33,8 @@ export interface MatchDetail {
   venue?: string | null;
   /** @nullable */
   matchGroup?: string | null;
+  /** @nullable */
+  clockAnchorMs?: number | null;
   streams: Stream[];
   events: MatchEvent[];
 }
