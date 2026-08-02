@@ -524,19 +524,20 @@ function SummaryTab({ match }: { match: MatchDetail }) {
 
   const mvpEvents = rawEvents.filter((e) => e.type === "mvp");
   const lineEvents = rawEvents.filter((e) => e.type !== "mvp");
-  const psoEvents = lineEvents.filter((e) => phase(e.minute) === "pso");
-  const et2Events = [
-    ...lineEvents.filter((e) => phase(e.minute) === "et2"),
-  ].reverse();
-  const et1Events = [
-    ...lineEvents.filter((e) => phase(e.minute) === "et1"),
-  ].reverse();
-  const h2Events = [
-    ...lineEvents.filter((e) => phase(e.minute) === "h2"),
-  ].reverse();
-  const h1Events = [
-    ...lineEvents.filter((e) => phase(e.minute) === "h1"),
-  ].reverse();
+
+  // Sort numerically by minute — minute is stored as text so DB ordering is lexicographic
+  // ("2" > "16"). Always sort with parseInt before grouping/reversing.
+  const minuteNum = (m: string) => {
+    const [base, extra] = m.split("+");
+    return parseInt(base, 10) * 100 + (extra ? parseInt(extra, 10) : 0);
+  };
+  const sortedLine = [...lineEvents].sort((a, b) => minuteNum(a.minute) - minuteNum(b.minute));
+
+  const psoEvents = sortedLine.filter((e) => phase(e.minute) === "pso");
+  const et2Events = [...sortedLine.filter((e) => phase(e.minute) === "et2")].reverse();
+  const et1Events = [...sortedLine.filter((e) => phase(e.minute) === "et1")].reverse();
+  const h2Events  = [...sortedLine.filter((e) => phase(e.minute) === "h2")].reverse();
+  const h1Events  = [...sortedLine.filter((e) => phase(e.minute) === "h1")].reverse();
 
   // HT score from H1 goal events
   const goalTypes = ["goal", "penalty_goal", "ten_meter_goal"];
