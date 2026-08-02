@@ -51,6 +51,9 @@ function useMatchStopwatch(
   const [stoppageCount, setStoppageCount] = useState(0);
   // Futsal half phase: 0 = 1st half (boundary 20'), 1 = 2nd half (boundary 40')
   const [halfPhase, setHalfPhase] = useState(0);
+  // clockAnchorMs: the wall-clock time when elapsed was 0 for the current running phase.
+  // Exposed so the parent can save it to DB for perfect public-page sync.
+  const [clockAnchorMs, setClockAnchorMs] = useState<number | null>(null);
 
   elapsedRef.current = elapsed;
 
@@ -61,6 +64,7 @@ function useMatchStopwatch(
     setStoppageBase(null);
     setStoppageCount(0);
     startWallRef.current = null;
+    setClockAnchorMs(null);
     if (isFutsal) {
       // Infer phase from stored minute (e.g. "21" → 2nd half)
       const min = parseInt((initialMinute || "0").split("+")[0], 10) || 0;
@@ -72,10 +76,13 @@ function useMatchStopwatch(
     if (!isRunning) {
       initRef.current = elapsedRef.current;
       startWallRef.current = null;
+      setClockAnchorMs(null);
       return;
     }
     if (startWallRef.current === null) {
-      startWallRef.current = Date.now() - initRef.current * 1000;
+      const anchor = Date.now() - initRef.current * 1000;
+      startWallRef.current = anchor;
+      setClockAnchorMs(anchor);
     }
     const id = setInterval(() => {
       setElapsed(Math.floor((Date.now() - startWallRef.current!) / 1000));
@@ -87,7 +94,9 @@ function useMatchStopwatch(
   const reset = (toMinute = 0, phase?: number) => {
     const toSeconds = Math.max(0, toMinute) * 60;
     initRef.current = toSeconds;
-    startWallRef.current = isRunning ? Date.now() - toSeconds * 1000 : null;
+    const anchor = isRunning ? Date.now() - toSeconds * 1000 : null;
+    startWallRef.current = anchor;
+    setClockAnchorMs(anchor);
     setElapsed(toSeconds);
     setStoppageBase(null);
     setStoppageCount(0);
@@ -98,7 +107,9 @@ function useMatchStopwatch(
   const addMinute = () => {
     const next = elapsed + 60;
     initRef.current = next;
-    startWallRef.current = isRunning ? Date.now() - next * 1000 : null;
+    const anchor = isRunning ? Date.now() - next * 1000 : null;
+    startWallRef.current = anchor;
+    setClockAnchorMs(anchor);
     setElapsed(next);
     if (stoppageBase === null) {
       setStoppageBase(Math.floor(elapsed / 60));
@@ -138,7 +149,7 @@ function useMatchStopwatch(
 
   const isStoppage = isAutoStoppage || (!isFutsal && stoppageBase !== null);
 
-  return { display, minuteStr, isStoppage, reset, addMinute };
+  return { display, minuteStr, isStoppage, reset, addMinute, clockAnchorMs };
 }
 
 /* ─── event log modal ─── */
@@ -435,23 +446,21 @@ export function EventsTab() {
 
   // Stopwatch
   const watchRunning = isLive && !isHalfTime && !isETHalfTime && !isPSO;
-  const { display: watchDisplay, minuteStr, isStoppage, reset: resetWatch, addMinute } = useMatchStopwatch(
+  const { display: watchDisplay, minuteStr, isStoppage, reset: resetWatch, addMinute, clockAnchorMs } = useMatchStopwatch(
     watchRunning,
     selectedMatchId,
     match?.minute,
     isFutsal
   );
 
-  // Auto-save the running minute to DB every 30 s so the public site stays in sync
-  const minuteStrRef = useRef(minuteStr);
-  minuteStrRef.current = minuteStr;
+  // Save clockAnchorMs to DB whenever it changes — this is the single source of truth
+  // that lets the public match page compute the exact same elapsed time with zero drift.
+  const savedAnchorRef = useRef<number | null>(undefined as unknown as number | null);
   useEffect(() => {
-    if (!isLive || isHalfTime || isETHalfTime || isPSO) return;
-    const id = setInterval(() => {
-      updateMatch.mutate({ id: selectedMatchId, data: { minute: minuteStrRef.current } });
-    }, 30_000);
-    return () => clearInterval(id);
-  }, [isLive, isHalfTime, selectedMatchId]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (clockAnchorMs === savedAnchorRef.current) return;
+    savedAnchorRef.current = clockAnchorMs;
+    updateMatch.mutate({ id: selectedMatchId, data: { clockAnchorMs: clockAnchorMs ?? null } });
+  }, [clockAnchorMs, selectedMatchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleResetWatch = () => {
     resetWatch(0);

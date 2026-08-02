@@ -57,6 +57,7 @@ function buildMatch(row: {
     awayRedCards: row.awayRedCards ?? 0,
     homeYellowCards: row.homeYellowCards ?? 0,
     awayYellowCards: row.awayYellowCards ?? 0,
+    clockAnchorMs: row.match.clockAnchorMs ?? null,
   };
 }
 

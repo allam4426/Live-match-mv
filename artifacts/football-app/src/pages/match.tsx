@@ -106,52 +106,51 @@ function useLiveStopwatch(
   minute: string | null | undefined,
   isLive: boolean,
   sport?: string | null,
+  clockAnchorMs?: number | null,
 ): StopwatchResult {
   const cacheKey = matchId != null ? String(matchId) : null;
-  // anchorRef holds the fixed reference point; seconds are computed from it at render time.
+  // anchorRef: fallback anchor used only when clockAnchorMs is unavailable.
   const anchorRef = useRef<{ base: number; wallTime: number } | null>(null);
   // tick is a counter incremented every second — its only job is to trigger re-renders.
   const [tick, setTick] = useState(0);
 
-  // Set / restore anchor whenever isLive or minute changes.
+  // Fallback anchor — set/restore from minute string when no server anchor is available.
   useEffect(() => {
-    if (!isLive) {
+    if (!isLive || clockAnchorMs != null) {
       anchorRef.current = null;
       return;
     }
     const parsed = parseSecs(minute);
-    if (parsed === null) {
-      anchorRef.current = null;
-      return;
-    }
-    // If anchor already matches the current minute, leave it alone (keeps elapsed time).
+    if (parsed === null) { anchorRef.current = null; return; }
     if (anchorRef.current && anchorRef.current.base === parsed) return;
-
-    // New minute (server update or first mount). Restore from cache if possible so
-    // navigating back doesn't reset the clock.
     const cached = cacheKey ? _stopwatchAnchors.get(cacheKey) : undefined;
-    const anchor =
-      cached && cached.base === parsed
-        ? cached
-        : { base: parsed, wallTime: Date.now() };
-
+    const anchor = cached && cached.base === parsed ? cached : { base: parsed, wallTime: Date.now() };
     anchorRef.current = anchor;
     if (cacheKey) _stopwatchAnchors.set(cacheKey, anchor);
-    setTick(t => t + 1); // force a render so the new anchor is visible immediately
-  }, [minute, isLive]); // eslint-disable-line react-hooks/exhaustive-deps
+    setTick(t => t + 1);
+  }, [minute, isLive, clockAnchorMs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Ticker — increments tick every second while live, causing a re-render each time.
-  // Seconds are computed fresh from anchorRef at render time — no stale-state issues.
   useEffect(() => {
     if (!isLive) return;
     const id = setInterval(() => setTick(t => t + 1), 1000);
     return () => clearInterval(id);
   }, [isLive]);
 
-  if (!isLive || !anchorRef.current) return null;
+  if (!isLive) return null;
 
-  // Compute current elapsed seconds directly from the anchor (always fresh).
-  const secs = anchorRef.current.base + Math.floor((Date.now() - anchorRef.current.wallTime) / 1000);
+  // PRIMARY: compute elapsed directly from the server-saved clockAnchorMs.
+  // This is the wall-clock time when elapsed was 0 for this phase — same value the admin
+  // uses — so both clocks are always identical regardless of polling latency.
+  let secs: number;
+  if (clockAnchorMs != null) {
+    secs = Math.max(0, Math.floor((Date.now() - clockAnchorMs) / 1000));
+  } else if (anchorRef.current) {
+    // FALLBACK: minute-string based anchor (up to ~30 s drift, used before first anchor save)
+    secs = anchorRef.current.base + Math.floor((Date.now() - anchorRef.current.wallTime) / 1000);
+  } else {
+    return null;
+  }
 
   // Boundary derived from the minute prop every render — no ref, no timing race.
   const boundary = (() => {
@@ -1433,7 +1432,7 @@ export default function MatchDetails() {
   });
 
   // Must be called unconditionally — before any early returns
-  const stopwatch = useLiveStopwatch(match?.id, match?.minute, match?.status === "live", match?.sport);
+  const stopwatch = useLiveStopwatch(match?.id, match?.minute, match?.status === "live", match?.sport, match?.clockAnchorMs);
 
   // Real-time score updates via SSE (also acts as a keep-alive for live matches)
   const queryClient = useQueryClient();
