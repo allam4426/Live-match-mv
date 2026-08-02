@@ -90,9 +90,9 @@ function useMatchStopwatch(
     return () => clearInterval(id);
   }, [isRunning]);
 
-  // reset(toMinute, phase?) — phase only used for futsal half changes
-  const reset = (toMinute = 0, phase?: number) => {
-    const toSeconds = Math.max(0, toMinute) * 60;
+  // reset(toMinute, phase?, overrideSecs?) — overrideSecs bypasses the minute→seconds formula
+  const reset = (toMinute = 0, phase?: number, overrideSecs?: number) => {
+    const toSeconds = overrideSecs !== undefined ? overrideSecs : Math.max(0, toMinute) * 60;
     initRef.current = toSeconds;
     const anchor = isRunning ? Date.now() - toSeconds * 1000 : null;
     startWallRef.current = anchor;
@@ -496,10 +496,13 @@ export function EventsTab() {
   };
 
   const handleSecondHalf = () => {
-    const halfDuration = match?.sport === "futsal" ? 20 : 45;
-    resetWatch(halfDuration, 1); // phase 1 = 2nd half (for futsal auto-stoppage at 40')
+    const isFutsalMatch = match?.sport === "futsal";
+    const halfDuration = isFutsalMatch ? 20 : 45;
+    // Futsal 2nd half starts at 20:01 (not 20:00); football keeps 45:00
+    const startSecs = isFutsalMatch ? halfDuration * 60 + 1 : halfDuration * 60;
+    resetWatch(halfDuration, 1, startSecs); // phase 1 = 2nd half (futsal auto-stoppage at 40')
     updateMatch.mutate(
-      { id: selectedMatchId, data: { status: "live", minute: String(halfDuration) } },
+      { id: selectedMatchId, data: { status: "live", minute: String(isFutsalMatch ? halfDuration + 1 : halfDuration) } },
       { onSuccess: invalidateMatches }
     );
   };
