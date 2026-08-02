@@ -163,15 +163,12 @@ function useLiveStopwatch(
     return getRegBoundarySecs(parseSecs(minute) ?? 0, sport);
   })();
 
-  // In fallback mode (no server anchor) cap at the boundary — we cannot know
-  // whether genuine injury/extra time is being played without the server anchor.
-  const effectiveSecs = clockAnchorMs == null ? Math.min(secs, boundary) : secs;
-  const cappedSecs = Math.min(effectiveSecs, boundary);
+  const cappedSecs = Math.min(secs, boundary);
   const mm = Math.floor(cappedSecs / 60);
   const ss = cappedSecs % 60;
   const main = `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
 
-  if (clockAnchorMs != null && secs > boundary) {
+  if (secs > boundary) {
     const extraSecs = secs - boundary;
     const em = Math.floor(extraSecs / 60);
     const es = extraSecs % 60;
