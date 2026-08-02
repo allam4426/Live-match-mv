@@ -93,12 +93,14 @@ function ZoneEditor({ zones, onChange }: { zones: QualificationZone[]; onChange:
             <label className="text-[9px] text-muted-foreground uppercase block mb-0.5">From pos</label>
             <input type="number" value={newZone.fromPos}
               onChange={e => setNewZone(z => ({ ...z, fromPos: e.target.value }))}
+              onKeyDown={e => e.key === "Enter" && e.preventDefault()}
               placeholder="1" className="admin-input text-xs py-1" />
           </div>
           <div>
             <label className="text-[9px] text-muted-foreground uppercase block mb-0.5">To pos</label>
             <input type="number" value={newZone.toPos}
               onChange={e => setNewZone(z => ({ ...z, toPos: e.target.value }))}
+              onKeyDown={e => e.key === "Enter" && e.preventDefault()}
               placeholder="1" className="admin-input text-xs py-1" />
           </div>
         </div>
