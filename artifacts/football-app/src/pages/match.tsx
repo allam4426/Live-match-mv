@@ -89,8 +89,16 @@ function parseSecs(m: string | null | undefined): number | null {
   if (!m) return null;
   if (["HT", "ET_HT", "PSO"].includes(m)) return null;
   const [base, extra] = m.split("+");
-  const total = parseInt(base, 10) + (extra ? parseInt(extra, 10) : 0);
-  return isNaN(total) ? null : total * 60;
+  const baseNum = parseInt(base, 10);
+  if (isNaN(baseNum)) return null;
+  if (extra !== undefined) {
+    // Extra-time format "20+2": anchor at 20*60 + 2*60 = 1320s (matches admin minuteStr)
+    const extraNum = parseInt(extra, 10);
+    return (baseNum + (isNaN(extraNum) ? 0 : extraNum)) * 60;
+  }
+  // Regular minute: admin stores "20" when clock reads 19:xx (the 20th minute is running).
+  // Mirror admin formula: Math.max(0, n - 1) * 60
+  return Math.max(0, baseNum - 1) * 60;
 }
 
 function useLiveStopwatch(
