@@ -5,9 +5,11 @@ import { Link } from "wouter";
 import { format } from "date-fns";
 import { motion } from "framer-motion";
 import { Play } from "lucide-react";
+import { useLiveStopwatch } from "@/hooks/use-live-stopwatch";
 
 export function MatchCard({ match }: { match: Match }) {
   const isLive = match.status === "live";
+  const stopwatch = useLiveStopwatch(match.id, match.minute, isLive, match.sport, match.clockAnchorMs);
 
   return (
     <motion.div whileHover={{ scale: 1.01 }} transition={{ duration: 0.15 }}>
@@ -57,7 +59,8 @@ export function MatchCard({ match }: { match: Match }) {
                 if (m === "PSO") return <span className="text-[11px] font-bold text-purple-400/90 mb-1">Penalties</span>;
                 const n = Number(m.split("+")[0]);
                 const phase = n > 105 ? "ET 2nd" : n > 90 ? "ET 1st" : n > 45 ? "H2" : "H1";
-                return <span className="text-[11px] font-medium text-white/60 mb-1">{phase} · {m}'</span>;
+                const timeStr = stopwatch ? `${stopwatch.main}${stopwatch.extra ?? ""}` : `${m}'`;
+                return <span className="text-[11px] font-medium text-white/60 mb-1">{phase} · {timeStr}</span>;
               })()}
               {(isLive || match.status === "finished") ? (
                 <div className="text-4xl font-black text-white tabular-nums tracking-tight">

@@ -4,10 +4,12 @@ import { Link } from "wouter";
 import { format } from "date-fns";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { useLiveStopwatch } from "@/hooks/use-live-stopwatch";
 
 function StatusCol({ match }: { match: Match }) {
   const isLive = match.status === "live";
   const isFinished = match.status === "finished";
+  const stopwatch = useLiveStopwatch(match.id, match.minute, isLive, match.sport, match.clockAnchorMs);
 
   if (isLive) {
     const m = match.minute;
@@ -15,6 +17,7 @@ function StatusCol({ match }: { match: Match }) {
       m === "HT" ? "HT"
       : m === "ET_HT" ? "ET"
       : m === "PSO" ? "PSO"
+      : stopwatch ? stopwatch.main
       : m ? `${m}'`
       : "Live";
     return (
