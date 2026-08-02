@@ -64,6 +64,12 @@ function TeamFormDots({ teamId }: { teamId: number }) {
 /* ── Live stopwatch: ticks up from the stored minute in real time ── */
 type StopwatchResult = { main: string; extra: string | null } | null;
 
+/**
+ * Module-level anchor cache — survives component unmount/remount (navigation).
+ * Key: matchId. Value: the anchor set when the server last updated the minute.
+ */
+const _stopwatchAnchors = new Map<string, { base: number; time: number }>();
+
 /** Returns the regulation cap in seconds for the current half, based on starting minute and sport. */
 function getRegBoundarySecs(startSecs: number, sport: string | null | undefined): number {
   const startMin = Math.floor(startSecs / 60);
@@ -79,24 +85,54 @@ function getRegBoundarySecs(startSecs: number, sport: string | null | undefined)
   return 120 * 60;
 }
 
+function parseSecs(m: string | null | undefined): number | null {
+  if (!m) return null;
+  if (["HT", "ET_HT", "PSO"].includes(m)) return null;
+  const [base, extra] = m.split("+");
+  const total = parseInt(base, 10) + (extra ? parseInt(extra, 10) : 0);
+  return isNaN(total) ? null : total * 60;
+}
+
 function useLiveStopwatch(
+  matchId: number | string | null | undefined,
   minute: string | null | undefined,
   isLive: boolean,
   sport?: string | null,
 ): StopwatchResult {
-  const parseSecs = (m: string | null | undefined) => {
-    if (!m) return null;
-    if (["HT", "ET_HT", "PSO"].includes(m)) return null;
-    const [base, extra] = m.split("+");
-    const total = parseInt(base, 10) + (extra ? parseInt(extra, 10) : 0);
-    return isNaN(total) ? null : total * 60;
-  };
+  const cacheKey = matchId != null ? String(matchId) : null;
 
-  const [secs, setSecs] = useState<number | null>(() =>
-    isLive ? parseSecs(minute) : null,
-  );
+  const [secs, setSecs] = useState<number | null>(() => {
+    if (!isLive) return null;
+    const parsed = parseSecs(minute);
+    if (parsed === null) return null;
+    // If we have a cached anchor whose base matches, resume from the correct elapsed time
+    if (cacheKey) {
+      const cached = _stopwatchAnchors.get(cacheKey);
+      if (cached && cached.base === parsed) {
+        return cached.base + Math.floor((Date.now() - cached.time) / 1000);
+      }
+    }
+    return parsed;
+  });
+
   const anchorRef = useRef<{ base: number; time: number } | null>(null);
   const boundaryRef = useRef<number>(Infinity);
+
+  // Initialise anchorRef from cache synchronously on first render so the
+  // interval effect starts with the right anchor even before the effect fires.
+  if (anchorRef.current === null && isLive) {
+    const parsed = parseSecs(minute);
+    if (parsed !== null) {
+      const cached = cacheKey ? _stopwatchAnchors.get(cacheKey) : undefined;
+      if (cached && cached.base === parsed) {
+        anchorRef.current = cached;
+      } else {
+        const anchor = { base: parsed, time: Date.now() };
+        anchorRef.current = anchor;
+        if (cacheKey) _stopwatchAnchors.set(cacheKey, anchor);
+      }
+    }
+  }
 
   useEffect(() => {
     if (!isLive) { setSecs(null); anchorRef.current = null; return; }
@@ -110,9 +146,17 @@ function useLiveStopwatch(
       } else {
         boundaryRef.current = getRegBoundarySecs(parsed, sport);
       }
+
+      // Only reset anchor when the server has actually pushed a new minute value.
+      // If the cached anchor has the same base the clock was already running — keep it.
+      const existing = anchorRef.current;
+      if (!existing || existing.base !== parsed) {
+        const anchor = { base: parsed, time: Date.now() };
+        anchorRef.current = anchor;
+        if (cacheKey) _stopwatchAnchors.set(cacheKey, anchor);
+        setSecs(parsed);
+      }
     }
-    if (parsed !== null) anchorRef.current = { base: parsed, time: Date.now() };
-    setSecs(parsed);
   }, [minute, isLive, sport]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -1397,7 +1441,7 @@ export default function MatchDetails() {
   });
 
   // Must be called unconditionally — before any early returns
-  const stopwatch = useLiveStopwatch(match?.minute, match?.status === "live", match?.sport);
+  const stopwatch = useLiveStopwatch(match?.id, match?.minute, match?.status === "live", match?.sport);
 
   // Real-time score updates via SSE (also acts as a keep-alive for live matches)
   const queryClient = useQueryClient();
