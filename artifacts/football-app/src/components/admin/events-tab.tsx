@@ -33,8 +33,9 @@ function parseMinuteToSeconds(minute: string | null | undefined): number {
   return Math.max(0, n - 1) * 60;
 }
 
-// Futsal half boundaries indexed by phase (0 = 1st half, 1 = 2nd half)
-const FUTSAL_BOUNDARIES = [20 * 60, 40 * 60] as const;
+// Half boundaries indexed by phase (0 = 1st half, 1 = 2nd half, …)
+const FUTSAL_BOUNDARIES   = [20 * 60, 40 * 60]                       as const;
+const FOOTBALL_BOUNDARIES = [45 * 60, 90 * 60, 105 * 60, 120 * 60]   as const;
 
 function useMatchStopwatch(
   isRunning: boolean,
@@ -46,10 +47,10 @@ function useMatchStopwatch(
   const elapsedRef = useRef(0);
   const startWallRef = useRef<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
-  // Football only — explicit stoppage via "+1 min"
+  // Kept for possible future use; auto-stoppage now drives football display too.
   const [stoppageBase, setStoppageBase] = useState<number | null>(null);
   const [stoppageCount, setStoppageCount] = useState(0);
-  // Futsal half phase: 0 = 1st half (boundary 20'), 1 = 2nd half (boundary 40')
+  // halfPhase: 0 = 1st half, 1 = 2nd half, 2 = ET 1st, 3 = ET 2nd
   const [halfPhase, setHalfPhase] = useState(0);
   // clockAnchorMs: the wall-clock time when elapsed was 0 for the current running phase.
   // Exposed so the parent can save it to DB for perfect public-page sync.
@@ -65,10 +66,15 @@ function useMatchStopwatch(
     setStoppageCount(0);
     startWallRef.current = null;
     setClockAnchorMs(null);
+    // Infer half phase from stored minute so the boundary is correct after reload
+    const min = parseInt((initialMinute || "0").split("+")[0], 10) || 0;
     if (isFutsal) {
-      // Infer phase from stored minute (e.g. "21" → 2nd half)
-      const min = parseInt((initialMinute || "0").split("+")[0], 10) || 0;
       setHalfPhase(min > 20 ? 1 : 0);
+    } else {
+      if (min > 105) setHalfPhase(3);
+      else if (min > 90) setHalfPhase(2);
+      else if (min > 45) setHalfPhase(1);
+      else setHalfPhase(0);
     }
   }, [matchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -123,23 +129,22 @@ function useMatchStopwatch(
   const totalMin = Math.floor(elapsed / 60);
   const ss = String(elapsed % 60).padStart(2, "0");
 
-  // Futsal: auto-stoppage once past the half boundary
-  const futsalBoundary = isFutsal
-    ? FUTSAL_BOUNDARIES[Math.min(halfPhase, FUTSAL_BOUNDARIES.length - 1)]
-    : undefined;
-  const isAutoStoppage = futsalBoundary !== undefined && elapsed >= futsalBoundary;
+  // Both sports: auto-stoppage once elapsed reaches the phase boundary
+  const boundaries = isFutsal ? FUTSAL_BOUNDARIES : FOOTBALL_BOUNDARIES;
+  const activeBoundary = boundaries[Math.min(halfPhase, boundaries.length - 1)];
+  const isAutoStoppage = elapsed >= activeBoundary;
 
   let display: string;
   let minuteStr: string;
 
-  if (isAutoStoppage && futsalBoundary !== undefined) {
-    const extraSecs = elapsed - futsalBoundary;
+  if (isAutoStoppage) {
+    const extraSecs = elapsed - activeBoundary;
     const extraMin = Math.floor(extraSecs / 60);
-    const base = Math.floor(futsalBoundary / 60);
+    const base = Math.floor(activeBoundary / 60);
     display = `${base}+${extraMin}:${String(extraSecs % 60).padStart(2, "0")}`;
     minuteStr = `${base}+${extraMin}`;
-  } else if (!isFutsal && stoppageBase !== null) {
-    // Football manual stoppage
+  } else if (stoppageBase !== null) {
+    // Legacy manual stoppage (kept for edge cases)
     display = `${stoppageBase}+${stoppageCount}:${ss}`;
     minuteStr = `${stoppageBase}+${stoppageCount}`;
   } else {
@@ -147,7 +152,7 @@ function useMatchStopwatch(
     minuteStr = String(totalMin + 1);
   }
 
-  const isStoppage = isAutoStoppage || (!isFutsal && stoppageBase !== null);
+  const isStoppage = isAutoStoppage || stoppageBase !== null;
 
   return { display, minuteStr, isStoppage, reset, addMinute, clockAnchorMs };
 }
@@ -496,13 +501,11 @@ export function EventsTab() {
   };
 
   const handleSecondHalf = () => {
-    const isFutsalMatch = match?.sport === "futsal";
-    const halfDuration = isFutsalMatch ? 20 : 45;
-    // Futsal 2nd half starts at 20:01 (not 20:00); football keeps 45:00
-    const startSecs = isFutsalMatch ? halfDuration * 60 + 1 : halfDuration * 60;
-    resetWatch(halfDuration, 1, startSecs); // phase 1 = 2nd half (futsal auto-stoppage at 40')
+    const halfDuration = match?.sport === "futsal" ? 20 : 45;
+    // Start 1 second past the half boundary so the display reads MM:01 immediately
+    resetWatch(halfDuration, 1, halfDuration * 60 + 1); // phase 1 = 2nd half boundary
     updateMatch.mutate(
-      { id: selectedMatchId, data: { status: "live", minute: String(isFutsalMatch ? halfDuration + 1 : halfDuration) } },
+      { id: selectedMatchId, data: { status: "live", minute: String(halfDuration + 1) } },
       { onSuccess: invalidateMatches }
     );
   };
@@ -693,15 +696,7 @@ export function EventsTab() {
                         )}>
                         {watchDisplay}
                       </button>
-                      {/* +1 min button — football only; futsal auto-runs extra time */}
-                      {!isFutsal && (
-                        <button
-                          onClick={addMinute}
-                          title="Add 1 minute (stoppage time)"
-                          className="flex items-center gap-0.5 bg-amber-500/20 hover:bg-amber-500/35 border border-amber-500/30 text-amber-400 font-black text-[11px] px-2 py-1 rounded-lg transition-colors">
-                          +1<span className="text-[9px] font-semibold opacity-70 ml-0.5">min</span>
-                        </button>
-                      )}
+                      {/* Extra time now auto-runs for both sports; +1 min button removed */}
                       {/* Reset */}
                       <button
                         onClick={handleResetWatch}

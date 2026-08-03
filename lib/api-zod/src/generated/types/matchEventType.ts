@@ -19,7 +19,13 @@ export const MatchEventType = {
   penalty_goal: 'penalty_goal',
   penalty_missed: 'penalty_missed',
   ten_meter_goal: 'ten_meter_goal',
+  ten_meter_missed: 'ten_meter_missed',
   foul: 'foul',
   substitution: 'substitution',
   mvp: 'mvp',
+  var_review: 'var_review',
+  var_award_goal: 'var_award_goal',
+  var_no_goal: 'var_no_goal',
+  var_award_foul: 'var_award_foul',
+  var_award_penalty: 'var_award_penalty',
 } as const;
