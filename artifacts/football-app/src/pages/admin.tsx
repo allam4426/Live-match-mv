@@ -11,6 +11,7 @@ import { LineupTab } from "@/components/admin/lineup-tab";
 import { StreamsTab } from "@/components/admin/streams-tab";
 import { PlayersTab } from "@/components/admin/players-tab";
 import { BannersTab } from "@/components/admin/banners-tab";
+import { TrophiesTab } from "@/components/admin/trophies-tab";
 import { SpotlightsTab } from "@/components/admin/spotlights-tab";
 import { StaffTab } from "@/components/admin/staff-tab";
 import { Activity, Calendar, CheckCircle2, Users, Trophy, LayoutGrid, LogOut, Lock, Image, UserCog, Mail } from "lucide-react";
@@ -226,6 +227,7 @@ export default function AdminDashboard() {
     "Lineup": <LineupTab />,
     "Streams": <StreamsTab />,
     "Banners": <BannersTab />,
+    "Trophies": <TrophiesTab />,
     "Staff": <StaffTab />,
   };
 
