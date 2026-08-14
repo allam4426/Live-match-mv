@@ -456,7 +456,7 @@ export default function TeamProfilePage() {
       </div>
 
       {/* Trophy Cabinet */}
-      {(tournaments?.length ?? 0) > 0 && (
+      {false && (tournaments?.length ?? 0) > 0 && (
         <div className="px-4 mb-4">
           <div className="bg-card rounded-xl border border-border overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">

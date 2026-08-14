@@ -16,6 +16,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/live", label: "Live" },
     { href: "/tournaments", label: "Tournaments" },
     { href: "/players", label: "Players" },
+  { href: "/about", label: "About Us" },
     ...(isAdmin ? [{ href: "/admin", label: "Admin" }] : []),
   ];
 
@@ -82,6 +83,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </main>
+
+      {/* Desktop Footer */}
+      <footer className="hidden md:block border-t border-border py-6 text-center text-sm text-muted-foreground">
+        © 2026 Livematchmv. All rights reserved.
+      </footer>
 
       {/* Bottom Mobile Nav */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around bg-card border-t border-border px-2 pt-2 pb-5">

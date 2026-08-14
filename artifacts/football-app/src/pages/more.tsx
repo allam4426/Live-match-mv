@@ -91,6 +91,13 @@ export default function MorePage() {
           />
         </Link>
 
+        <Link href="/about">
+          <Row
+            label="About Us"
+            right={<ChevronRight className="w-4 h-4 text-muted-foreground" />}
+          />
+        </Link>
+
         <Row
           label="Official"
           right={
