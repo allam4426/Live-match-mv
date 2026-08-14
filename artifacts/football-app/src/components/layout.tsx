@@ -13,6 +13,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const topNav = [
     { href: "/", label: "Home" },
+    { href: "/teams", label: "Teams" },
     { href: "/live", label: "Live" },
     { href: "/tournaments", label: "Tournaments" },
     { href: "/players", label: "Players" },
