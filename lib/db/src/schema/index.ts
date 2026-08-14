@@ -10,3 +10,4 @@ export * from "./banners";
 export * from "./admin_users";
 export * from "./spotlights";
 export * from "./push_subscriptions";
+export * from "./trophies";

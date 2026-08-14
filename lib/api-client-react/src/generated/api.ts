@@ -43,6 +43,7 @@ import type {
   ListStreamsParams,
   ListTeamsParams,
   ListTournamentsParams,
+  ListTrophiesParams,
   Match,
   MatchDetail,
   MatchEvent,
@@ -68,7 +69,9 @@ import type {
   TournamentStandings,
   TournamentTopScorers,
   TournamentUpdate,
-  TournamentWithStatus
+  TournamentWithStatus,
+  Trophy,
+  TrophyInput
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -371,6 +374,303 @@ export const useDeleteSpotlight = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDeleteSpotlightMutationOptions(options));
+    }
+
+export const getListTrophiesUrl = (params?: ListTrophiesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/trophies?${stringifiedParams}` : `/api/trophies`
+}
+
+/**
+ * @summary List trophies
+ */
+export const listTrophies = async (params?: ListTrophiesParams, options?: RequestInit): Promise<Trophy[]> => {
+
+  return customFetch<Trophy[]>(getListTrophiesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListTrophiesQueryKey = (params?: ListTrophiesParams,) => {
+    return [
+    `/api/trophies`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListTrophiesQueryOptions = <TData = Awaited<ReturnType<typeof listTrophies>>, TError = ErrorType<unknown>>(params?: ListTrophiesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTrophies>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListTrophiesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTrophies>>> = ({ signal }) => listTrophies(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listTrophies>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListTrophiesQueryResult = NonNullable<Awaited<ReturnType<typeof listTrophies>>>
+export type ListTrophiesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List trophies
+ */
+
+export function useListTrophies<TData = Awaited<ReturnType<typeof listTrophies>>, TError = ErrorType<unknown>>(
+ params?: ListTrophiesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTrophies>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListTrophiesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateTrophyUrl = () => {
+
+
+
+
+  return `/api/trophies`
+}
+
+/**
+ * @summary Create a trophy
+ */
+export const createTrophy = async (trophyInput: TrophyInput, options?: RequestInit): Promise<Trophy> => {
+
+  return customFetch<Trophy>(getCreateTrophyUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      trophyInput,)
+  }
+);}
+
+
+
+
+export const getCreateTrophyMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTrophy>>, TError,{data: BodyType<TrophyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createTrophy>>, TError,{data: BodyType<TrophyInput>}, TContext> => {
+
+const mutationKey = ['createTrophy'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createTrophy>>, {data: BodyType<TrophyInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createTrophy(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateTrophyMutationResult = NonNullable<Awaited<ReturnType<typeof createTrophy>>>
+    export type CreateTrophyMutationBody = BodyType<TrophyInput>
+    export type CreateTrophyMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a trophy
+ */
+export const useCreateTrophy = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTrophy>>, TError,{data: BodyType<TrophyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createTrophy>>,
+        TError,
+        {data: BodyType<TrophyInput>},
+        TContext
+      > => {
+      return useMutation(getCreateTrophyMutationOptions(options));
+    }
+
+export const getUpdateTrophyUrl = (id: number,) => {
+
+
+
+
+  return `/api/trophies/${id}`
+}
+
+/**
+ * @summary Update a trophy
+ */
+export const updateTrophy = async (id: number,
+    trophyInput: TrophyInput, options?: RequestInit): Promise<Trophy> => {
+
+  return customFetch<Trophy>(getUpdateTrophyUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      trophyInput,)
+  }
+);}
+
+
+
+
+export const getUpdateTrophyMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateTrophy>>, TError,{id: number;data: BodyType<TrophyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateTrophy>>, TError,{id: number;data: BodyType<TrophyInput>}, TContext> => {
+
+const mutationKey = ['updateTrophy'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateTrophy>>, {id: number;data: BodyType<TrophyInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateTrophy(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateTrophyMutationResult = NonNullable<Awaited<ReturnType<typeof updateTrophy>>>
+    export type UpdateTrophyMutationBody = BodyType<TrophyInput>
+    export type UpdateTrophyMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update a trophy
+ */
+export const useUpdateTrophy = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateTrophy>>, TError,{id: number;data: BodyType<TrophyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateTrophy>>,
+        TError,
+        {id: number;data: BodyType<TrophyInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateTrophyMutationOptions(options));
+    }
+
+export const getDeleteTrophyUrl = (id: number,) => {
+
+
+
+
+  return `/api/trophies/${id}`
+}
+
+/**
+ * @summary Delete a trophy
+ */
+export const deleteTrophy = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteTrophyUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteTrophyMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTrophy>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteTrophy>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteTrophy'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteTrophy>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteTrophy(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteTrophyMutationResult = NonNullable<Awaited<ReturnType<typeof deleteTrophy>>>
+
+    export type DeleteTrophyMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a trophy
+ */
+export const useDeleteTrophy = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTrophy>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteTrophy>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteTrophyMutationOptions(options));
     }
 
 export const getListBannersUrl = (params?: ListBannersParams,) => {

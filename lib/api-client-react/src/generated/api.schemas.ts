@@ -776,6 +776,22 @@ export interface SpotlightInput {
   sortOrder?: number;
 }
 
+export interface Trophy {
+  id: number;
+  teamId: number;
+  title: string;
+  season: string;
+  imageUrl: string;
+  createdAt: string;
+}
+
+export interface TrophyInput {
+  teamId: number;
+  title: string;
+  season?: string;
+  imageUrl?: string;
+}
+
 export type BannerPosition = typeof BannerPosition[keyof typeof BannerPosition];
 
 
@@ -907,6 +923,10 @@ export interface TournamentTopScorers {
   redCards: TournamentPlayerStat[];
   ownGoals: TournamentPlayerStat[];
 }
+
+export type ListTrophiesParams = {
+teamId?: number;
+};
 
 export type ListBannersParams = {
 position?: ListBannersPosition;

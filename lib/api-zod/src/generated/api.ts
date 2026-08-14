@@ -74,6 +74,67 @@ export const DeleteSpotlightParams = zod.object({
 
 
 /**
+ * @summary List trophies
+ */
+export const ListTrophiesQueryParams = zod.object({
+  "teamId": zod.coerce.number().optional()
+})
+
+export const ListTrophiesResponseItem = zod.object({
+  "id": zod.number(),
+  "teamId": zod.number(),
+  "title": zod.string(),
+  "season": zod.string(),
+  "imageUrl": zod.string(),
+  "createdAt": zod.string()
+})
+export const ListTrophiesResponse = zod.array(ListTrophiesResponseItem)
+
+
+/**
+ * @summary Create a trophy
+ */
+export const CreateTrophyBody = zod.object({
+  "teamId": zod.number(),
+  "title": zod.string(),
+  "season": zod.string().optional(),
+  "imageUrl": zod.string().optional()
+})
+
+
+/**
+ * @summary Update a trophy
+ */
+export const UpdateTrophyParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateTrophyBody = zod.object({
+  "teamId": zod.number(),
+  "title": zod.string(),
+  "season": zod.string().optional(),
+  "imageUrl": zod.string().optional()
+})
+
+export const UpdateTrophyResponse = zod.object({
+  "id": zod.number(),
+  "teamId": zod.number(),
+  "title": zod.string(),
+  "season": zod.string(),
+  "imageUrl": zod.string(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Delete a trophy
+ */
+export const DeleteTrophyParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
  * @summary List banners
  */
 export const ListBannersQueryParams = zod.object({

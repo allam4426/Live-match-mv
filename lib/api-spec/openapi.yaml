@@ -11,6 +11,7 @@ tags:
   - name: health
     description: Health operations
   - name: banners
+  - name: trophies
     description: Ad banner operations
   - name: matches
     description: Match operations
@@ -101,6 +102,79 @@ paths:
         "204":
           description: Deleted
 
+  /trophies:
+    get:
+      operationId: listTrophies
+      tags: [trophies]
+      summary: List trophies
+      parameters:
+        - in: query
+          name: teamId
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of trophies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Trophy"
+    post:
+      operationId: createTrophy
+      tags: [trophies]
+      summary: Create a trophy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrophyInput"
+      responses:
+        "201":
+          description: Created trophy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trophy"
+  /trophies/{id}:
+    patch:
+      operationId: updateTrophy
+      tags: [trophies]
+      summary: Update a trophy
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrophyInput"
+      responses:
+        "200":
+          description: Updated trophy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trophy"
+    delete:
+      operationId: deleteTrophy
+      tags: [trophies]
+      summary: Delete a trophy
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
   /banners:
     get:
       operationId: listBanners
@@ -2020,6 +2094,34 @@ components:
         sortOrder:
           type: integer
 
+    Trophy:
+      type: object
+      required: [id, teamId, title, season, imageUrl, createdAt]
+      properties:
+        id:
+          type: integer
+        teamId:
+          type: integer
+        title:
+          type: string
+        season:
+          type: string
+        imageUrl:
+          type: string
+        createdAt:
+          type: string
+    TrophyInput:
+      type: object
+      required: [teamId, title]
+      properties:
+        teamId:
+          type: integer
+        title:
+          type: string
+        season:
+          type: string
+        imageUrl:
+          type: string
     Banner:
       type: object
       required: [id, imageUrl, linkUrl, position, isActive, createdAt]

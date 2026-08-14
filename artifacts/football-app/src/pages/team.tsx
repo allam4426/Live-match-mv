@@ -2,6 +2,7 @@ import { useParams, Link, useLocation } from "wouter";
 import {
   useGetTeam,
   useGetTeamSquad,
+  useListTrophies,
   getGetTeamQueryKey,
   getGetTeamSquadQueryKey,
 } from "@workspace/api-client-react";
@@ -403,6 +404,7 @@ export default function TeamProfilePage() {
   });
   const { data: matches, loading: matchesLoading } = useTeamMatches(teamId);
   const { data: tournaments } = useTeamTournaments(teamId);
+  const { data: trophies } = useListTrophies({ teamId: teamId ? Number(teamId) : undefined });
   const { data: stats, loading: statsLoading } = useTeamStats(teamId);
 
   if (teamLoading) {
@@ -456,7 +458,7 @@ export default function TeamProfilePage() {
       </div>
 
       {/* Trophy Cabinet */}
-      {false && (tournaments?.length ?? 0) > 0 && (
+      {(trophies?.length ?? 0) > 0 && (
         <div className="px-4 mb-4">
           <div className="bg-card rounded-xl border border-border overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
@@ -464,22 +466,20 @@ export default function TeamProfilePage() {
               <Info className="w-4 h-4 text-muted-foreground" />
             </div>
             <div className="divide-y divide-border/40">
-              {(tournaments ?? []).map(t => (
-                <Link key={t.id} href={`/tournament/${t.id}`}>
-                  <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/20 transition-colors">
-                    <div className="w-10 h-10 rounded-lg bg-muted/50 flex items-center justify-center shrink-0 overflow-hidden">
-                      {t.logoUrl ? (
-                        <img src={t.logoUrl} alt={t.name} className="w-9 h-9 object-contain" />
-                      ) : (
-                        <Trophy className="w-5 h-5 text-primary" />
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">{t.name}</p>
-                      {t.season && <p className="text-[11px] text-muted-foreground">{t.season}</p>}
-                    </div>
+              {(trophies ?? []).map(t => (
+                <div key={t.id} className="flex items-center gap-3 px-4 py-3">
+                  <div className="w-10 h-10 rounded-lg bg-muted/50 flex items-center justify-center shrink-0 overflow-hidden">
+                    {t.imageUrl ? (
+                      <img src={t.imageUrl} alt={t.title} className="w-9 h-9 object-contain" />
+                    ) : (
+                      <Trophy className="w-5 h-5 text-primary" />
+                    )}
                   </div>
-                </Link>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{t.title}</p>
+                    {t.season && <p className="text-[11px] text-muted-foreground">{t.season}</p>}
+                  </div>
+                </div>
               ))}
             </div>
           </div>
