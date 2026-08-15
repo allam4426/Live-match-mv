@@ -33,10 +33,28 @@
     #splash .splash-name span{color:#cc0000;}
     @keyframes splashPulse{0%,100%{transform:scale(1);opacity:1;}50%{transform:scale(0.92);opacity:0.7;}}
       #splash .splash-version{margin-top:8px;font-family:Inter,sans-serif;font-size:13px;color:#8a94a6;}
+    @media (min-width:768px){ #splash{display:none !important;} }
   </style>
 </head>
   <body>
-    <div id="root"><div id="splash"><img src="/logo.png" alt="Livematchmv" /><div class="splash-name">Live<span>matchmv</span></div><div class="splash-version">v2.0.1</div></div></div>
+    <div id="splash"><img src="/logo.png" alt="Livematchmv" /><div class="splash-name">Live<span>matchmv</span></div><div class="splash-version">v2.0.1</div></div>
+    <div id="root"></div>
+    <script>window.__splashStart = Date.now();</script>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      (function(){
+        var MIN_MS = 4000;
+        function hideSplash(){
+          var el = document.getElementById("splash");
+          if(!el) return;
+          el.style.transition = "opacity .4s ease";
+          el.style.opacity = "0";
+          setTimeout(function(){ el.remove(); }, 400);
+        }
+        var elapsed = Date.now() - (window.__splashStart || Date.now());
+        var wait = Math.max(MIN_MS - elapsed, 0);
+        setTimeout(hideSplash, wait);
+      })();
+    </script>
   </body>
 </html>
