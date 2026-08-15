@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Livematchmv</string>
+    <string name="title_activity_main">Livematchmv</string>
+    <string name="package_name">com.livematchmv.app</string>
+    <string name="custom_url_scheme">com.livematchmv.app</string>
+</resources>
