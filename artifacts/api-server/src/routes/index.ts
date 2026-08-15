@@ -15,6 +15,7 @@ import bannersRouter from "./banners";
 import spotlightsRouter from "./spotlights";
 import seedRouter from "./seed";
 import pushRouter from "./push";
+import trophiesRouter from "./trophies";
 
 const router: IRouter = Router();
 
@@ -34,5 +35,6 @@ router.use(bannersRouter);
 router.use(spotlightsRouter);
 router.use(seedRouter);
 router.use(pushRouter);
+router.use(trophiesRouter);
 
 export default router;
