@@ -26,9 +26,17 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  </head>
+  <style>
+    #splash{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0f1c2e;}
+    #splash img{width:96px;height:96px;border-radius:20px;animation:splashPulse 1.4s ease-in-out infinite;}
+    #splash .splash-name{margin-top:16px;font-family:Inter,sans-serif;font-weight:700;font-size:22px;color:#fff;}
+    #splash .splash-name span{color:#cc0000;}
+    @keyframes splashPulse{0%,100%{transform:scale(1);opacity:1;}50%{transform:scale(0.92);opacity:0.7;}}
+      #splash .splash-version{margin-top:8px;font-family:Inter,sans-serif;font-size:13px;color:#8a94a6;}
+  </style>
+</head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div id="splash"><img src="/logo.png" alt="Livematchmv" /><div class="splash-name">Live<span>matchmv</span></div><div class="splash-version">v2.0.1</div></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

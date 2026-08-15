@@ -16,7 +16,7 @@ import { SpotlightsTab } from "@/components/admin/spotlights-tab";
 import { StaffTab } from "@/components/admin/staff-tab";
 import { Activity, Calendar, CheckCircle2, Users, Trophy, LayoutGrid, LogOut, Lock, Image, UserCog, Mail } from "lucide-react";
 
-const SUPERADMIN_TABS = ["Overview", "Spotlights", "Teams", "Players", "Tournaments", "Matches", "Live Events", "Lineup", "Streams", "Banners", "Staff"] as const;
+const SUPERADMIN_TABS = ["Overview", "Spotlights", "Teams", "Players", "Tournaments", "Matches", "Live Events", "Lineup", "Streams", "Banners", "Trophies", "Staff"] as const;
 const STAFF_TABS = ["Overview", "Spotlights", "Teams", "Players", "Tournaments", "Matches", "Live Events", "Lineup", "Streams", "Banners"] as const;
 type Tab = typeof SUPERADMIN_TABS[number];
 

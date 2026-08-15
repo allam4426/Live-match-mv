@@ -137,7 +137,7 @@ export default function MorePage() {
 
         <Row
           label="Version"
-          right={<span className="text-sm text-muted-foreground font-medium">1.0.0</span>}
+          right={<span className="text-sm text-muted-foreground font-medium">2.0.1</span>}
         />
       </div>
     </div>
