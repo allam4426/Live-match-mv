@@ -180,6 +180,22 @@ export default function Home() {
   const stripDays = Array.from({ length: STRIP_BEFORE + STRIP_AFTER + 1 }, (_, i) =>
     addDays(selectedDate, i - STRIP_BEFORE)
   );
+  // If today has no matches, auto-jump to the nearest date that does
+  const hasAutoJumped = useRef(false);
+  useEffect(() => {
+    if (hasAutoJumped.current || !allMatches || allMatches.length === 0) return;
+    const todayHasMatches = allMatches.some(m => isSameDay(new Date(m.kickoffAt), selectedDate));
+    if (todayHasMatches) { hasAutoJumped.current = true; return; }
+    const sorted = [...allMatches].sort((a, b) => {
+      const diffA = Math.abs(new Date(a.kickoffAt).getTime() - selectedDate.getTime());
+      const diffB = Math.abs(new Date(b.kickoffAt).getTime() - selectedDate.getTime());
+      return diffA - diffB;
+    });
+    if (sorted[0]) {
+      setSelectedDate(startOfDay(new Date(sorted[0].kickoffAt)));
+    }
+    hasAutoJumped.current = true;
+  }, [allMatches]);
 
   // Active custom image spotlights (sorted by sortOrder)
   const activeCustom: CarouselItem[] = (customSpotlights ?? [])

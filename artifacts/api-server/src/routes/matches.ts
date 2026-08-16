@@ -33,6 +33,8 @@ function buildMatch(row: {
   awayRedCards?: number;
   homeYellowCards?: number;
   awayYellowCards?: number;
+  homePenGoals?: number;
+  awayPenGoals?: number;
 }) {
   const homeTeam = row.homeTeam ?? TBD_TEAM;
   const awayTeam = row.awayTeam ?? TBD_TEAM;
@@ -57,6 +59,8 @@ function buildMatch(row: {
     awayRedCards: row.awayRedCards ?? 0,
     homeYellowCards: row.homeYellowCards ?? 0,
     awayYellowCards: row.awayYellowCards ?? 0,
+    homePenGoals: row.homePenGoals ?? 0,
+    awayPenGoals: row.awayPenGoals ?? 0,
     clockAnchorMs: row.match.clockAnchorMs ?? null,
   };
 }
@@ -99,6 +103,33 @@ async function fetchCardCounts(matchIds: number[], rows: Array<{ match: typeof m
   return result;
 }
 
+async function fetchPenaltyGoals(matchIds: number[], rows: Array<{ match: typeof matchesTable.$inferSelect }>) {
+  if (matchIds.length === 0) return new Map<number, { home: number; away: number }>();
+  const penRows = await db
+    .select({
+      matchId: matchEventsTable.matchId,
+      teamId: matchEventsTable.teamId,
+      cnt: count(),
+    })
+    .from(matchEventsTable)
+    .where(and(
+      inArray(matchEventsTable.matchId, matchIds),
+      eq(matchEventsTable.type, "penalty_goal"),
+    ))
+    .groupBy(matchEventsTable.matchId, matchEventsTable.teamId);
+  const matchTeamMap = new Map(rows.map(r => [r.match.id, { homeTeamId: r.match.homeTeamId, awayTeamId: r.match.awayTeamId }]));
+  const result = new Map<number, { home: number; away: number }>();
+  for (const pr of penRows) {
+    const teams = matchTeamMap.get(pr.matchId!);
+    if (!teams || !pr.matchId) continue;
+    const entry = result.get(pr.matchId) ?? { home: 0, away: 0 };
+    const n = Number(pr.cnt);
+    if (pr.teamId === teams.homeTeamId) entry.home += n; else entry.away += n;
+    result.set(pr.matchId, entry);
+  }
+  return result;
+}
+
 router.get("/matches", async (req, res) => {
   const params = ListMatchesQueryParams.safeParse({
     status: req.query.status,
@@ -136,16 +167,18 @@ router.get("/matches", async (req, res) => {
     .limit(params.success ? (params.data.limit ?? 50) : 50);
 
   const matchIds = rows.map(r => r.match.id);
-  const [streamCounts, cardCountMap] = await Promise.all([
+  const [streamCounts, cardCountMap, penGoalsMap] = await Promise.all([
     matchIds.length > 0
       ? db.select({ matchId: streamsTable.matchId, cnt: count() }).from(streamsTable).groupBy(streamsTable.matchId)
       : Promise.resolve([]),
     fetchCardCounts(matchIds, rows),
+    fetchPenaltyGoals(matchIds, rows),
   ]);
   const streamCountMap = new Map(streamCounts.map(s => [s.matchId, Number(s.cnt)]));
 
   res.json(rows.map(row => {
     const cards = cardCountMap.get(row.match.id);
+    const pen = penGoalsMap.get(row.match.id);
     return buildMatch({
       ...row,
       streamCount: streamCountMap.get(row.match.id) ?? 0,
@@ -153,6 +186,8 @@ router.get("/matches", async (req, res) => {
       awayRedCards: cards?.awayRed,
       homeYellowCards: cards?.homeYellow,
       awayYellowCards: cards?.awayYellow,
+      homePenGoals: pen?.home,
+      awayPenGoals: pen?.away,
     });
   }));
 });

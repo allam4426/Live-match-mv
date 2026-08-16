@@ -113,12 +113,21 @@ export function MatchRow({
               </span>
               <CardIndicators yellow={match.homeYellowCards} red={match.homeRedCards} />
               {showScore ? (
-                <span className={cn(
-                  "text-[14px] font-black tabular-nums shrink-0 ml-1 w-5 text-right",
-                  isLive ? "text-foreground" : "text-muted-foreground"
-                )}>
-                  {match.homeScore}
-                </span>
+                <>
+                  <span className={cn(
+                    "text-[14px] font-black tabular-nums shrink-0 ml-1 w-5 text-right",
+                    isLive ? "text-foreground" : "text-muted-foreground"
+                  )}>
+                    {isFinished && (match as any).homePenGoals > 0
+                      ? match.homeScore - (match as any).homePenGoals
+                      : match.homeScore}
+                  </span>
+                  {isFinished && (match as any).homePenGoals > 0 && (
+                    <span className="text-[10px] font-bold text-muted-foreground/60 shrink-0 ml-0.5">
+                      ({(match as any).homePenGoals})
+                    </span>
+                  )}
+                </>
               ) : showDate ? (
                 <span className="text-[10px] text-muted-foreground/50 shrink-0 ml-1 tabular-nums">
                   {format(new Date(match.kickoffAt), "d MMM")}
@@ -139,12 +148,21 @@ export function MatchRow({
               </span>
               <CardIndicators yellow={match.awayYellowCards} red={match.awayRedCards} />
               {showScore && (
-                <span className={cn(
-                  "text-[14px] font-black tabular-nums shrink-0 ml-1 w-5 text-right",
-                  isLive ? "text-foreground" : "text-muted-foreground"
-                )}>
-                  {match.awayScore}
-                </span>
+                <>
+                  <span className={cn(
+                    "text-[14px] font-black tabular-nums shrink-0 ml-1 w-5 text-right",
+                    isLive ? "text-foreground" : "text-muted-foreground"
+                  )}>
+                    {isFinished && (match as any).awayPenGoals > 0
+                      ? match.awayScore - (match as any).awayPenGoals
+                      : match.awayScore}
+                  </span>
+                  {isFinished && (match as any).awayPenGoals > 0 && (
+                    <span className="text-[10px] font-bold text-muted-foreground/60 shrink-0 ml-0.5">
+                      ({(match as any).awayPenGoals})
+                    </span>
+                  )}
+                </>
               )}
             </div>
           </div>
