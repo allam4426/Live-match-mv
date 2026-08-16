@@ -115,6 +115,7 @@ async function fetchPenaltyGoals(matchIds: number[], rows: Array<{ match: typeof
     .where(and(
       inArray(matchEventsTable.matchId, matchIds),
       eq(matchEventsTable.type, "penalty_goal"),
+      eq(matchEventsTable.minute, "PSO"),
     ))
     .groupBy(matchEventsTable.matchId, matchEventsTable.teamId);
   const matchTeamMap = new Map(rows.map(r => [r.match.id, { homeTeamId: r.match.homeTeamId, awayTeamId: r.match.awayTeamId }]));
