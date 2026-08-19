@@ -326,6 +326,8 @@ interface SummaryEvent {
 }
 
 function InlineEventIcon({ type }: { type: string }) {
+  if (type === "substitution")
+    return <SubstitutionIcon className="scale-[0.6] -mx-1" />;
   if (type === "goal")
     return <span className="text-[13px] leading-none">⚽</span>;
   if (type === "penalty_goal" || type === "ten_meter_goal")
