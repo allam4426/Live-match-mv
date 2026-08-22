@@ -19,6 +19,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/players", label: "Players" },
   { href: "/about", label: "About Us" },
   { href: "/privacy", label: "Privacy Policy" },
+  { href: "/terms", label: "Terms & Conditions" },
     ...(isAdmin ? [{ href: "/admin", label: "Admin" }] : []),
   ];
 
