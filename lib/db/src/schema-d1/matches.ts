@@ -1,0 +1,28 @@
+import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod/v4";
+import { teamsTable } from "./teams";
+import { tournamentsTable } from "./tournaments";
+
+export const matchesTable = sqliteTable("matches", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  homeTeamId: integer("home_team_id").references(() => teamsTable.id, { onDelete: "set null" }),
+  awayTeamId: integer("away_team_id").references(() => teamsTable.id, { onDelete: "set null" }),
+  homeScore: integer("home_score").notNull().default(0),
+  awayScore: integer("away_score").notNull().default(0),
+  status: text("status").notNull().default("scheduled"),
+  minute: text("minute"),
+  competition: text("competition").notNull(),
+  competitionLogo: text("competition_logo"),
+  kickoffAt: integer("kickoff_at", { mode: "timestamp" }).notNull(),
+  featured: integer("featured", { mode: "boolean" }).notNull().default(false),
+  sport: text("sport").notNull().default("football"),
+  tournamentId: integer("tournament_id").references(() => tournamentsTable.id, { onDelete: "set null" }),
+  venue: text("venue"),
+  matchGroup: text("match_group"),
+  clockAnchorMs: integer("clock_anchor_ms", { mode: "number" }),
+});
+
+export const insertMatchSchema = createInsertSchema(matchesTable).omit({ id: true });
+export type InsertMatch = z.infer<typeof insertMatchSchema>;
+export type Match = typeof matchesTable.$inferSelect;

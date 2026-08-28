@@ -45,6 +45,7 @@ router.post("/matches/:id/lineup/auto", async (req, res) => {
       position: p.position,
       role: p.role,
       isStarting: p.isStarting,
+      photoUrl: p.photoUrl,
     })) : []),
     ...(awayTeamId ? awaySquad.map(p => ({
       matchId,
@@ -54,6 +55,7 @@ router.post("/matches/:id/lineup/auto", async (req, res) => {
       position: p.position,
       role: p.role,
       isStarting: p.isStarting,
+      photoUrl: p.photoUrl,
     })) : []),
   ];
 

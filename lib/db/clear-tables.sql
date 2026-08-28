@@ -1,0 +1,13 @@
+DELETE FROM lineups;
+DELETE FROM match_events;
+DELETE FROM streams;
+DELETE FROM matches;
+DELETE FROM squads;
+DELETE FROM trophies;
+DELETE FROM highlights;
+DELETE FROM tournaments;
+DELETE FROM teams;
+DELETE FROM banners;
+DELETE FROM admin_users;
+DELETE FROM spotlights;
+DELETE FROM push_subscriptions;
