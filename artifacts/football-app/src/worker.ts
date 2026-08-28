@@ -486,13 +486,12 @@ function buildMatch(row: any) {
 async function fetchCardCounts(db: any, matchIds: number[], rows: any[]) {
   const result = new Map<number, { homeRed: number; awayRed: number; homeYellow: number; awayYellow: number }>();
   if (matchIds.length === 0) return result;
-  const cardRows = await db
+  const matchIdSet = new Set(matchIds);
+  const allCardRows = await db
     .select()
     .from(schema.matchEventsTable)
-    .where(and(
-      inArray(schema.matchEventsTable.matchId, matchIds),
-      inArray(schema.matchEventsTable.type, ["yellow_card", "red_card", "second_yellow_red"]),
-    ));
+    .where(inArray(schema.matchEventsTable.type, ["yellow_card", "red_card", "second_yellow_red"]));
+  const cardRows = allCardRows.filter((r: any) => matchIdSet.has(r.matchId));
   const matchTeamMap = new Map(rows.map((r) => [r.match.id, { homeTeamId: r.match.homeTeamId, awayTeamId: r.match.awayTeamId }]));
   for (const cr of cardRows) {
     const teams = matchTeamMap.get(cr.matchId);
@@ -510,14 +509,15 @@ async function fetchCardCounts(db: any, matchIds: number[], rows: any[]) {
 async function fetchPenaltyGoals(db: any, matchIds: number[], rows: any[]) {
   const result = new Map<number, { home: number; away: number }>();
   if (matchIds.length === 0) return result;
-  const penRows = await db
+  const matchIdSet = new Set(matchIds);
+  const allPenRows = await db
     .select()
     .from(schema.matchEventsTable)
     .where(and(
-      inArray(schema.matchEventsTable.matchId, matchIds),
       eq(schema.matchEventsTable.type, "penalty_goal"),
       eq(schema.matchEventsTable.minute, "PSO"),
     ));
+  const penRows = allPenRows.filter((r: any) => matchIdSet.has(r.matchId));
   const matchTeamMap = new Map(rows.map((r) => [r.match.id, { homeTeamId: r.match.homeTeamId, awayTeamId: r.match.awayTeamId }]));
   for (const pr of penRows) {
     const teams = matchTeamMap.get(pr.matchId);
@@ -530,9 +530,9 @@ async function fetchPenaltyGoals(db: any, matchIds: number[], rows: any[]) {
 }
 
 async function joinMatchRows(db: any, matches: any[]) {
-  const teamIds = [...new Set(matches.flatMap((m) => [m.homeTeamId, m.awayTeamId]).filter((x): x is number => x !== null))];
-  const teams = teamIds.length > 0 ? await db.select().from(schema.teamsTable).where(inArray(schema.teamsTable.id, teamIds)) : [];
-  const teamMap = new Map(teams.map((t: any) => [t.id, t]));
+  const teamIds = new Set(matches.flatMap((m) => [m.homeTeamId, m.awayTeamId]).filter((x): x is number => x !== null));
+  const allTeams = teamIds.size > 0 ? await db.select().from(schema.teamsTable) : [];
+  const teamMap = new Map(allTeams.filter((t: any) => teamIds.has(t.id)).map((t: any) => [t.id, t]));
   return matches.map((match) => ({
     match,
     homeTeam: match.homeTeamId ? teamMap.get(match.homeTeamId) ?? null : null,
@@ -582,12 +582,15 @@ app.get("/api/matches", async (c) => {
   const matchIds = rows.map((r) => r.match.id);
 
   const [streamCounts, cardCountMap, penGoalsMap] = await Promise.all([
-    matchIds.length > 0 ? db.select().from(schema.streamsTable).where(inArray(schema.streamsTable.matchId, matchIds)) : Promise.resolve([]),
+    matchIds.length > 0 ? db.select().from(schema.streamsTable) : Promise.resolve([]),
     fetchCardCounts(db, matchIds, rows),
     fetchPenaltyGoals(db, matchIds, rows),
   ]);
+  const matchIdSetForStreams = new Set(matchIds);
   const streamCountMap = new Map<number, number>();
-  for (const s of streamCounts) streamCountMap.set(s.matchId, (streamCountMap.get(s.matchId) ?? 0) + 1);
+  for (const s of streamCounts) {
+    if (matchIdSetForStreams.has(s.matchId)) streamCountMap.set(s.matchId, (streamCountMap.get(s.matchId) ?? 0) + 1);
+  }
 
   return c.json(rows.map((row) => {
     const cards = cardCountMap.get(row.match.id);
