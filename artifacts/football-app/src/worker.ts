@@ -483,15 +483,16 @@ function buildMatch(row: any) {
   };
 }
 
+function chunkArray(arr, size) { const chunks = []; for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size)); return chunks; }
 async function fetchCardCounts(db: any, matchIds: number[], rows: any[]) {
   const result = new Map<number, { homeRed: number; awayRed: number; homeYellow: number; awayYellow: number }>();
   if (matchIds.length === 0) return result;
-  const matchIdSet = new Set(matchIds);
-  const allCardRows = await db
-    .select()
-    .from(schema.matchEventsTable)
-    .where(inArray(schema.matchEventsTable.type, ["yellow_card", "red_card", "second_yellow_red"]));
-  const cardRows = allCardRows.filter((r: any) => matchIdSet.has(r.matchId));
+  const chunks = chunkArray(matchIds, 50);
+  const cardRows: any[] = [];
+  for (const chunk of chunks) {
+    const rowsChunk = await db.select().from(schema.matchEventsTable).where(and(inArray(schema.matchEventsTable.matchId, chunk), inArray(schema.matchEventsTable.type, ["yellow_card", "red_card", "second_yellow_red"])));
+    cardRows.push(...rowsChunk);
+  }
   const matchTeamMap = new Map(rows.map((r) => [r.match.id, { homeTeamId: r.match.homeTeamId, awayTeamId: r.match.awayTeamId }]));
   for (const cr of cardRows) {
     const teams = matchTeamMap.get(cr.matchId);
@@ -509,15 +510,12 @@ async function fetchCardCounts(db: any, matchIds: number[], rows: any[]) {
 async function fetchPenaltyGoals(db: any, matchIds: number[], rows: any[]) {
   const result = new Map<number, { home: number; away: number }>();
   if (matchIds.length === 0) return result;
-  const matchIdSet = new Set(matchIds);
-  const allPenRows = await db
-    .select()
-    .from(schema.matchEventsTable)
-    .where(and(
-      eq(schema.matchEventsTable.type, "penalty_goal"),
-      eq(schema.matchEventsTable.minute, "PSO"),
-    ));
-  const penRows = allPenRows.filter((r: any) => matchIdSet.has(r.matchId));
+  const chunks = chunkArray(matchIds, 50);
+  const penRows: any[] = [];
+  for (const chunk of chunks) {
+    const rowsChunk = await db.select().from(schema.matchEventsTable).where(and(inArray(schema.matchEventsTable.matchId, chunk), eq(schema.matchEventsTable.type, "penalty_goal"), eq(schema.matchEventsTable.minute, "PSO")));
+    penRows.push(...rowsChunk);
+  }
   const matchTeamMap = new Map(rows.map((r) => [r.match.id, { homeTeamId: r.match.homeTeamId, awayTeamId: r.match.awayTeamId }]));
   for (const pr of penRows) {
     const teams = matchTeamMap.get(pr.matchId);
@@ -530,9 +528,16 @@ async function fetchPenaltyGoals(db: any, matchIds: number[], rows: any[]) {
 }
 
 async function joinMatchRows(db: any, matches: any[]) {
-  const teamIds = new Set(matches.flatMap((m) => [m.homeTeamId, m.awayTeamId]).filter((x): x is number => x !== null));
-  const allTeams = teamIds.size > 0 ? await db.select().from(schema.teamsTable) : [];
-  const teamMap = new Map(allTeams.filter((t: any) => teamIds.has(t.id)).map((t: any) => [t.id, t]));
+  const teamIds = [...new Set(matches.flatMap((m) => [m.homeTeamId, m.awayTeamId]).filter((x): x is number => x !== null))];
+  const allTeams: any[] = [];
+  if (teamIds.length > 0) {
+    const chunks = chunkArray(teamIds, 50);
+    for (const chunk of chunks) {
+      const teamsChunk = await db.select().from(schema.teamsTable).where(inArray(schema.teamsTable.id, chunk));
+      allTeams.push(...teamsChunk);
+    }
+  }
+  const teamMap = new Map(allTeams.map((t: any) => [t.id, t]));
   return matches.map((match) => ({
     match,
     homeTeam: match.homeTeamId ? teamMap.get(match.homeTeamId) ?? null : null,
