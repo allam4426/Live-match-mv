@@ -554,6 +554,7 @@ app.get("/api/matches/:id/lineup", async (c) => {
   });
 });
 app.post("/api/matches/:id/lineup/auto", async (c) => {
+  try {
   const matchId = Number(c.req.param("id"));
   const db = drizzle(c.env.DB, { schema });
   const [match] = await db.select().from(schema.matchesTable).where(eq(schema.matchesTable.id, matchId));
@@ -576,6 +577,9 @@ app.post("/api/matches/:id/lineup/auto", async (c) => {
     home: all.filter((p) => p.teamId === match.homeTeamId),
     away: all.filter((p) => p.teamId === match.awayTeamId),
   });
+  } catch (err) {
+    return c.json({ debugError: err.message, stack: err.stack }, 500);
+  }
 });
 app.post("/api/matches/:id/lineup", async (c) => {
   const matchId = Number(c.req.param("id"));
