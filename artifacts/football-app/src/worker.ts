@@ -540,6 +540,70 @@ async function joinMatchRows(db: any, matches: any[]) {
   }));
 }
 
+
+app.get("/api/matches/:id/lineup", async (c) => {
+  const matchId = Number(c.req.param("id"));
+  const db = drizzle(c.env.DB, { schema });
+  const [match] = await db.select().from(schema.matchesTable).where(eq(schema.matchesTable.id, matchId));
+  if (!match) return c.json({ error: "Match not found" }, 404);
+  const all = await db.select().from(schema.lineupsTable).where(eq(schema.lineupsTable.matchId, matchId));
+  return c.json({
+    matchId,
+    home: all.filter((p) => p.teamId === match.homeTeamId),
+    away: all.filter((p) => p.teamId === match.awayTeamId),
+  });
+});
+app.post("/api/matches/:id/lineup/auto", async (c) => {
+  const matchId = Number(c.req.param("id"));
+  const db = drizzle(c.env.DB, { schema });
+  const [match] = await db.select().from(schema.matchesTable).where(eq(schema.matchesTable.id, matchId));
+  if (!match) return c.json({ error: "Match not found" }, 404);
+  const homeTeamId = match.homeTeamId;
+  const awayTeamId = match.awayTeamId;
+  const [homeSquad, awaySquad] = await Promise.all([
+    homeTeamId ? db.select().from(schema.squadsTable).where(eq(schema.squadsTable.teamId, homeTeamId)) : Promise.resolve([]),
+    awayTeamId ? db.select().from(schema.squadsTable).where(eq(schema.squadsTable.teamId, awayTeamId)) : Promise.resolve([]),
+  ]);
+  await db.delete(schema.lineupsTable).where(eq(schema.lineupsTable.matchId, matchId));
+  const toInsert = [
+    ...(homeTeamId ? homeSquad.map((p) => ({ matchId, teamId: homeTeamId, playerNumber: p.playerNumber, playerName: p.playerName, position: p.position, role: p.role, isStarting: p.isStarting, photoUrl: p.photoUrl })) : []),
+    ...(awayTeamId ? awaySquad.map((p) => ({ matchId, teamId: awayTeamId, playerNumber: p.playerNumber, playerName: p.playerName, position: p.position, role: p.role, isStarting: p.isStarting, photoUrl: p.photoUrl })) : []),
+  ];
+  if (toInsert.length > 0) await db.insert(schema.lineupsTable).values(toInsert);
+  const all = await db.select().from(schema.lineupsTable).where(eq(schema.lineupsTable.matchId, matchId));
+  return c.json({
+    matchId,
+    home: all.filter((p) => p.teamId === match.homeTeamId),
+    away: all.filter((p) => p.teamId === match.awayTeamId),
+  });
+});
+app.post("/api/matches/:id/lineup", async (c) => {
+  const matchId = Number(c.req.param("id"));
+  const db = drizzle(c.env.DB, { schema });
+  const body = await c.req.json();
+  const [player] = await db.insert(schema.lineupsTable).values({ matchId, ...body }).returning();
+  return c.json(player, 201);
+});
+app.patch("/api/matches/:id/lineup/:playerId", async (c) => {
+  const matchId = Number(c.req.param("id"));
+  const playerId = Number(c.req.param("playerId"));
+  const db = drizzle(c.env.DB, { schema });
+  const body = await c.req.json();
+  const updates = {};
+  if (body.role !== undefined) updates.role = body.role;
+  if (body.isStarting !== undefined) updates.isStarting = body.isStarting;
+  if (Object.keys(updates).length === 0) return c.json({ error: "Nothing to update" }, 400);
+  const [updated] = await db.update(schema.lineupsTable).set(updates).where(and(eq(schema.lineupsTable.id, playerId), eq(schema.lineupsTable.matchId, matchId))).returning();
+  return c.json(updated);
+});
+app.delete("/api/matches/:id/lineup/:playerId", async (c) => {
+  const matchId = Number(c.req.param("id"));
+  const playerId = Number(c.req.param("playerId"));
+  const db = drizzle(c.env.DB, { schema });
+  await db.delete(schema.lineupsTable).where(and(eq(schema.lineupsTable.id, playerId), eq(schema.lineupsTable.matchId, matchId)));
+  return c.body(null, 204);
+});
+
 app.get("/api/matches/live", async (c) => {
   const db = drizzle(c.env.DB, { schema });
   const sport = c.req.query("sport");
