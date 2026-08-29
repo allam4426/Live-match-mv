@@ -584,7 +584,7 @@ app.post("/api/matches/:id/lineup/auto", async (c) => {
     away: all.filter((p) => p.teamId === match.awayTeamId),
   });
   } catch (err) {
-    return c.json({ debugError: err.message, stack: err.stack }, 500);
+    return c.json({ debugError: err.message, cause: err.cause ? String(err.cause.message || err.cause) : null }, 500);
   }
 });
 app.post("/api/matches/:id/lineup", async (c) => {
