@@ -166,12 +166,12 @@ export default function Home() {
   const stripRef = useRef<HTMLDivElement>(null);
 
   const { data: liveMatches, isLoading: liveLoading, refetch: refetchLive } = useListLiveMatches();
-  const { data: allMatches, isLoading: matchesLoading, refetch: refetchMatches } = useListMatches({ limit: 500 });
+  const { data: allMatches, isLoading: matchesLoading, refetch: refetchMatches } = useListMatches({ limit: 100 });
   const { data: customSpotlights } = useListSpotlights();
 
   // Poll every 30 s so live scores and minutes stay current
   useEffect(() => {
-    const id = setInterval(() => { refetchLive(); refetchMatches(); }, 20000);
+    const id = setInterval(() => { refetchLive(); refetchMatches(); }, 60000);
     return () => clearInterval(id);
   }, [refetchLive, refetchMatches]);
   const { data: competitions } = useListCompetitions();

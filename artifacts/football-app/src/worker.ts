@@ -794,10 +794,14 @@ async function sendLiveMatchNotifications(env, db, row) {
     try {
       const payload = await buildPushPayload(message, subscription, vapid);
       const res = await fetch(sub.endpoint, payload);
+      const resText = await res.text();
+      console.error("PUSH_DEBUG status=" + res.status + " body=" + resText);
       if (res.status === 404 || res.status === 410) {
         await db.delete(schema.pushSubscriptionsTable).where(eq(schema.pushSubscriptionsTable.id, sub.id));
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("PUSH_DEBUG_ERROR " + (e && e.message ? e.message : String(e)));
+    }
   }
 }
 app.patch("/api/matches/:id", async (c) => {
