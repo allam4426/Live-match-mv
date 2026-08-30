@@ -420,7 +420,7 @@ export function EventsTab() {
   const isETPhase = !isFutsal && minuteNum > 90;
 
   const { data: events, isLoading: evLoading } = useListMatchEvents(selectedMatchId, {
-    query: { enabled: !!selectedMatchId, queryKey: getListMatchEventsQueryKey(selectedMatchId), refetchInterval: isLive ? 15000 : false },
+    query: { enabled: !!selectedMatchId, queryKey: getListMatchEventsQueryKey(selectedMatchId), refetchInterval: isLive ? 30000 : false },
   });
   const { data: lineup } = useGetMatchLineup(selectedMatchId, {
     query: { enabled: !!selectedMatchId, queryKey: getGetMatchLineupQueryKey(selectedMatchId) },

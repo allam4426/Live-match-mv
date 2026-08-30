@@ -10,7 +10,7 @@ export default function LiveMatches() {
 
   // Poll every 30 s so the live minute counter stays current
   useEffect(() => {
-    const id = setInterval(() => refetch(), 3000);
+    const id = setInterval(() => refetch(), 20000);
     return () => clearInterval(id);
   }, [refetch]);
 

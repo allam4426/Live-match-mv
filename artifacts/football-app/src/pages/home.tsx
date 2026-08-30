@@ -171,7 +171,7 @@ export default function Home() {
 
   // Poll every 30 s so live scores and minutes stay current
   useEffect(() => {
-    const id = setInterval(() => { refetchLive(); refetchMatches(); }, 3000);
+    const id = setInterval(() => { refetchLive(); refetchMatches(); }, 20000);
     return () => clearInterval(id);
   }, [refetchLive, refetchMatches]);
   const { data: competitions } = useListCompetitions();

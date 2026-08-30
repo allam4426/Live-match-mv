@@ -4,6 +4,8 @@ import bcrypt from "bcryptjs";
 import { drizzle } from "drizzle-orm/d1";
 import { eq, or, desc, inArray, and, asc, count as sqlCount, sql } from "drizzle-orm";
 import * as schema from "@workspace/db/schema-d1";
+import { buildPushPayload } from "@block65/webcrypto-web-push";
+import { buildPushPayload } from "@block65/webcrypto-web-push";
 
 type Bindings = {
   DB: D1Database;
@@ -777,6 +779,27 @@ app.get("/api/matches/:id", async (c) => {
   return c.json({ ...buildMatch({ ...rows[0], streamCount: streams.length }), streams, events });
 });
 
+async function sendLiveMatchNotifications(env, db, row) {
+  const subs = await db.select().from(schema.pushSubscriptionsTable);
+  if (subs.length === 0) return;
+  const vapid = { subject: env.VAPID_CONTACT, publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY };
+  const homeName = row.homeTeam ? row.homeTeam.name : "TBD";
+  const awayName = row.awayTeam ? row.awayTeam.name : "TBD";
+  const message = {
+    data: JSON.stringify({ title: "Match Live!", body: homeName + " vs " + awayName + " has started" }),
+    options: { ttl: 3000, urgency: "high" },
+  };
+  for (const sub of subs) {
+    const subscription = { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } };
+    try {
+      const payload = await buildPushPayload(message, subscription, vapid);
+      const res = await fetch(sub.endpoint, payload);
+      if (res.status === 404 || res.status === 410) {
+        await db.delete(schema.pushSubscriptionsTable).where(eq(schema.pushSubscriptionsTable.id, sub.id));
+      }
+    } catch (e) {}
+  }
+}
 app.patch("/api/matches/:id", async (c) => {
   const db = drizzle(c.env.DB, { schema });
   const id = Number(c.req.param("id"));
@@ -785,11 +808,15 @@ app.patch("/api/matches/:id", async (c) => {
   const updateData: Record<string, unknown> = { ...rest };
   if (kickoffAt) updateData.kickoffAt = new Date(kickoffAt);
 
+  const [oldMatch] = await db.select().from(schema.matchesTable).where(eq(schema.matchesTable.id, id));
   const [match] = await db.update(schema.matchesTable).set(updateData).where(eq(schema.matchesTable.id, id)).returning();
   if (!match) return c.json({ error: "Match not found" }, 404);
 
   const rows = await joinMatchRows(db, [match]);
   const streamRows = await db.select().from(schema.streamsTable).where(eq(schema.streamsTable.matchId, id));
+  if (match.status === "live" && oldMatch && oldMatch.status !== "live") {
+    c.executionCtx.waitUntil(sendLiveMatchNotifications(c.env, db, rows[0]));
+  }
   return c.json(buildMatch({ ...rows[0], streamCount: streamRows.length }));
 });
 

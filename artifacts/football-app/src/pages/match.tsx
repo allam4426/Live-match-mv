@@ -1430,7 +1430,7 @@ export default function MatchDetails() {
     query: {
       enabled: !!matchId,
       queryKey: getGetMatchQueryKey(matchId),
-      refetchInterval: (q) => (q.state.data?.status === "live" ? 5000 : false),
+      refetchInterval: (q) => (q.state.data?.status === "live" ? 15000 : false),
       refetchOnMount: "always",
       staleTime: 0,
     },
