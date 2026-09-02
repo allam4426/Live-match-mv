@@ -1160,6 +1160,25 @@ async function sendLiveMatchNotifications(
     body: `${homeName} vs ${awayName} has started`,
   });
 }
+
+async function sendFinishedMatchNotifications(
+  env: Bindings,
+  db: WorkerDb,
+  row: {
+    match: schema.Match;
+    homeTeam: schema.Team | null;
+    awayTeam: schema.Team | null;
+  },
+): Promise<void> {
+  const homeName = row.homeTeam?.name ?? "Home";
+  const awayName = row.awayTeam?.name ?? "Away";
+  await sendPushToAll(env, db, {
+    title: "Full Time",
+    body: `${homeName} ${row.match.homeScore ?? 0}–${row.match.awayScore ?? 0} ${awayName} — ${row.match.competition}`,
+    url: `/match/${row.match.id}`,
+  });
+}
+
 app.patch("/api/matches/:id", async (c) => {
   const db = drizzle(c.env.DB, { schema });
   const id = Number(c.req.param("id"));
@@ -1179,6 +1198,7 @@ app.patch("/api/matches/:id", async (c) => {
   }
   if (match.status === "finished" && oldMatch && oldMatch.status !== "finished") {
     await ensureMatchLineupsFromSquads(db, id);
+    c.executionCtx.waitUntil(sendFinishedMatchNotifications(c.env, db, rows[0]));
   }
   return c.json(buildMatch({ ...rows[0], streamCount: streamRows.length }));
 });
