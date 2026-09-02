@@ -720,16 +720,37 @@ async function ensureMatchLineupsFromSquads(db: WorkerDb, matchId: number): Prom
   return players.length;
 }
 
+async function attachSquadPhotos(
+  db: WorkerDb,
+  players: Array<{ teamId: number; playerName: string; photoUrl?: string | null }>,
+) {
+  const teamIds = [...new Set(players.map((player) => player.teamId))];
+  if (teamIds.length === 0) return players;
+
+  const squads = await db.select().from(schema.squadsTable).where(inArray(schema.squadsTable.teamId, teamIds));
+  const photoByPlayer = new Map(
+    squads.map((player) => [`${player.teamId}:${player.playerName.trim().toLowerCase()}`, player.photoUrl]),
+  );
+
+  return players.map((player) => ({
+    ...player,
+    photoUrl: player.photoUrl
+      ?? photoByPlayer.get(`${player.teamId}:${player.playerName.trim().toLowerCase()}`)
+      ?? null,
+  }));
+}
+
 app.get("/api/matches/:id/lineup", async (c) => {
   const matchId = Number(c.req.param("id"));
   const db = drizzle(c.env.DB, { schema });
   const [match] = await db.select().from(schema.matchesTable).where(eq(schema.matchesTable.id, matchId));
   if (!match) return c.json({ error: "Match not found" }, 404);
   const all = await db.select().from(schema.lineupsTable).where(eq(schema.lineupsTable.matchId, matchId));
+  const enriched = await attachSquadPhotos(db, all);
   return c.json({
     matchId,
-    home: all.filter((p) => p.teamId === match.homeTeamId),
-    away: all.filter((p) => p.teamId === match.awayTeamId),
+    home: enriched.filter((p) => p.teamId === match.homeTeamId),
+    away: enriched.filter((p) => p.teamId === match.awayTeamId),
   });
 });
 app.post("/api/matches/:id/lineup/auto", async (c) => {
@@ -757,10 +778,11 @@ app.post("/api/matches/:id/lineup/auto", async (c) => {
     }
   }
   const all = await db.select().from(schema.lineupsTable).where(eq(schema.lineupsTable.matchId, matchId));
+  const enriched = await attachSquadPhotos(db, all);
   return c.json({
     matchId,
-    home: all.filter((p) => p.teamId === match.homeTeamId),
-    away: all.filter((p) => p.teamId === match.awayTeamId),
+    home: enriched.filter((p) => p.teamId === match.homeTeamId),
+    away: enriched.filter((p) => p.teamId === match.awayTeamId),
   });
   } catch (err: unknown) {
     const error = err instanceof Error ? err : new Error(String(err));

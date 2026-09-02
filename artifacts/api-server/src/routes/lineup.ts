@@ -1,19 +1,43 @@
 import { Router } from "express";
 import { db, lineupsTable, matchesTable, squadsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { AddLineupPlayerBody } from "@workspace/api-zod";
 
 const router = Router();
+
+async function attachSquadPhotos(
+  players: Array<{ teamId: number; playerName: string; photoUrl?: string | null }>,
+) {
+  const teamIds = [...new Set(players.map(player => player.teamId))];
+  if (teamIds.length === 0) return players;
+
+  const squads = await db.select().from(squadsTable).where(
+    teamIds.length === 1
+      ? eq(squadsTable.teamId, teamIds[0])
+      : inArray(squadsTable.teamId, teamIds),
+  );
+  const photoByPlayer = new Map(
+    squads.map(player => [`${player.teamId}:${player.playerName.trim().toLowerCase()}`, player.photoUrl]),
+  );
+
+  return players.map(player => ({
+    ...player,
+    photoUrl: player.photoUrl
+      ?? photoByPlayer.get(`${player.teamId}:${player.playerName.trim().toLowerCase()}`)
+      ?? null,
+  }));
+}
 
 router.get("/matches/:id/lineup", async (req, res) => {
   const matchId = Number(req.params.id);
   const [match] = await db.select().from(matchesTable).where(eq(matchesTable.id, matchId));
   if (!match) { res.status(404).json({ error: "Match not found" }); return; }
   const all = await db.select().from(lineupsTable).where(eq(lineupsTable.matchId, matchId));
+  const enriched = await attachSquadPhotos(all);
   res.json({
     matchId,
-    home: all.filter(p => p.teamId === match.homeTeamId),
-    away: all.filter(p => p.teamId === match.awayTeamId),
+    home: enriched.filter(p => p.teamId === match.homeTeamId),
+    away: enriched.filter(p => p.teamId === match.awayTeamId),
   });
 });
 
@@ -64,10 +88,11 @@ router.post("/matches/:id/lineup/auto", async (req, res) => {
   }
 
   const all = await db.select().from(lineupsTable).where(eq(lineupsTable.matchId, matchId));
+  const enriched = await attachSquadPhotos(all);
   res.json({
     matchId,
-    home: all.filter(p => p.teamId === match.homeTeamId),
-    away: all.filter(p => p.teamId === match.awayTeamId),
+    home: enriched.filter(p => p.teamId === match.homeTeamId),
+    away: enriched.filter(p => p.teamId === match.awayTeamId),
   });
 });
 
