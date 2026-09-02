@@ -775,7 +775,7 @@ export const ListActiveTournamentsResponse = zod.array(ListActiveTournamentsResp
 
 
 /**
- * @summary Get all matches for a tournament
+ * @summary Get all matches for a tournament, including descendant stages
  */
 export const GetTournamentMatchesParams = zod.object({
   "id": zod.coerce.number()
@@ -812,6 +812,8 @@ export const GetTournamentMatchesResponseItem = zod.object({
   "tournamentId": zod.number().nullish(),
   "venue": zod.string().nullish(),
   "matchGroup": zod.string().nullish(),
+  "stageName": zod.string().optional().describe('Tournament stage containing this match'),
+  "stageType": zod.enum(['championship', 'atoll', 'zone', 'regional', 'final']).optional().describe('Type of tournament stage containing this match'),
   "homeRedCards": zod.number(),
   "awayRedCards": zod.number(),
   "homeYellowCards": zod.number(),
@@ -955,6 +957,8 @@ export const ListMatchesResponseItem = zod.object({
   "tournamentId": zod.number().nullish(),
   "venue": zod.string().nullish(),
   "matchGroup": zod.string().nullish(),
+  "stageName": zod.string().optional().describe('Tournament stage containing this match'),
+  "stageType": zod.enum(['championship', 'atoll', 'zone', 'regional', 'final']).optional().describe('Type of tournament stage containing this match'),
   "homeRedCards": zod.number(),
   "awayRedCards": zod.number(),
   "homeYellowCards": zod.number(),
@@ -1023,6 +1027,8 @@ export const ListLiveMatchesResponseItem = zod.object({
   "tournamentId": zod.number().nullish(),
   "venue": zod.string().nullish(),
   "matchGroup": zod.string().nullish(),
+  "stageName": zod.string().optional().describe('Tournament stage containing this match'),
+  "stageType": zod.enum(['championship', 'atoll', 'zone', 'regional', 'final']).optional().describe('Type of tournament stage containing this match'),
   "homeRedCards": zod.number(),
   "awayRedCards": zod.number(),
   "homeYellowCards": zod.number(),
@@ -1148,6 +1154,8 @@ export const UpdateMatchResponse = zod.object({
   "tournamentId": zod.number().nullish(),
   "venue": zod.string().nullish(),
   "matchGroup": zod.string().nullish(),
+  "stageName": zod.string().optional().describe('Tournament stage containing this match'),
+  "stageType": zod.enum(['championship', 'atoll', 'zone', 'regional', 'final']).optional().describe('Type of tournament stage containing this match'),
   "homeRedCards": zod.number(),
   "awayRedCards": zod.number(),
   "homeYellowCards": zod.number(),

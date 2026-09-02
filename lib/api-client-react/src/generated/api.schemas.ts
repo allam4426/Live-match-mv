@@ -429,6 +429,20 @@ export const MatchSport = {
   futsal: 'futsal',
 } as const;
 
+/**
+ * Type of tournament stage containing this match
+ */
+export type MatchStageType = typeof MatchStageType[keyof typeof MatchStageType];
+
+
+export const MatchStageType = {
+  championship: 'championship',
+  atoll: 'atoll',
+  zone: 'zone',
+  regional: 'regional',
+  final: 'final',
+} as const;
+
 export interface Match {
   id: number;
   homeTeam: Team;
@@ -451,6 +465,10 @@ export interface Match {
   venue?: string | null;
   /** @nullable */
   matchGroup?: string | null;
+  /** Tournament stage containing this match */
+  stageName?: string;
+  /** Type of tournament stage containing this match */
+  stageType?: MatchStageType;
   homeRedCards: number;
   awayRedCards: number;
   homeYellowCards: number;

@@ -13,6 +13,30 @@ import { alias } from "drizzle-orm/pg-core";
 
 const router = Router();
 
+function collectTournamentTreeIds(
+  rootId: number,
+  tournaments: Array<{ id: number; parentTournamentId: number | null }>,
+) {
+  const ids = new Set<number>([rootId]);
+  let added = true;
+
+  while (added) {
+    added = false;
+    for (const tournament of tournaments) {
+      if (
+        tournament.parentTournamentId !== null &&
+        ids.has(tournament.parentTournamentId) &&
+        !ids.has(tournament.id)
+      ) {
+        ids.add(tournament.id);
+        added = true;
+      }
+    }
+  }
+
+  return [...ids];
+}
+
 router.get("/tournaments", async (req, res) => {
   const sport = req.query.sport as string | undefined;
   let rows = await db.select().from(tournamentsTable).orderBy(tournamentsTable.name);
@@ -116,33 +140,48 @@ router.get("/tournaments/:id/matches", async (req, res) => {
   const id = Number(req.params.id);
   const homeTeam = alias(teamsTable, "homeTeam");
   const awayTeam = alias(teamsTable, "awayTeam");
+  const tournaments = await db
+    .select({
+      id: tournamentsTable.id,
+      name: tournamentsTable.name,
+      parentTournamentId: tournamentsTable.parentTournamentId,
+      stageType: tournamentsTable.stageType,
+    })
+    .from(tournamentsTable);
+  const tournamentIds = collectTournamentTreeIds(id, tournaments);
+  const tournamentMap = new Map(tournaments.map(tournament => [tournament.id, tournament]));
 
   const rows = await db
     .select({ match: matchesTable, homeTeam, awayTeam })
     .from(matchesTable)
     .leftJoin(homeTeam, eq(matchesTable.homeTeamId, homeTeam.id))
     .leftJoin(awayTeam, eq(matchesTable.awayTeamId, awayTeam.id))
-    .where(eq(matchesTable.tournamentId, id))
+    .where(inArray(matchesTable.tournamentId, tournamentIds))
     .orderBy(matchesTable.kickoffAt);
 
-  res.json(rows.map(row => ({
-    id: row.match.id,
-    homeTeam: row.homeTeam ?? TBD_TEAM,
-    awayTeam: row.awayTeam ?? TBD_TEAM,
-    homeScore: row.match.homeScore,
-    awayScore: row.match.awayScore,
-    status: row.match.status,
-    minute: row.match.minute,
-    competition: row.match.competition,
-    competitionLogo: row.match.competitionLogo,
-    kickoffAt: row.match.kickoffAt.toISOString(),
-    streamCount: 0,
-    featured: row.match.featured,
-    sport: row.match.sport ?? "football",
-    tournamentId: row.match.tournamentId,
-    venue: row.match.venue,
-    matchGroup: row.match.matchGroup,
-  })));
+  res.json(rows.map(row => {
+    const stage = row.match.tournamentId ? tournamentMap.get(row.match.tournamentId) : undefined;
+    return {
+      id: row.match.id,
+      homeTeam: row.homeTeam ?? TBD_TEAM,
+      awayTeam: row.awayTeam ?? TBD_TEAM,
+      homeScore: row.match.homeScore,
+      awayScore: row.match.awayScore,
+      status: row.match.status,
+      minute: row.match.minute,
+      competition: row.match.competition,
+      competitionLogo: row.match.competitionLogo,
+      kickoffAt: row.match.kickoffAt.toISOString(),
+      streamCount: 0,
+      featured: row.match.featured,
+      sport: row.match.sport ?? "football",
+      tournamentId: row.match.tournamentId,
+      stageName: stage?.name,
+      stageType: stage?.stageType,
+      venue: row.match.venue,
+      matchGroup: row.match.matchGroup,
+    };
+  }));
 });
 
 function computeStandings(matches: Array<{

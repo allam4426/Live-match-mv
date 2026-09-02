@@ -52,6 +52,7 @@ export * from './matchInputSport';
 export * from './matchInputStatus';
 export * from './matchLineup';
 export * from './matchSport';
+export * from './matchStageType';
 export * from './matchStatus';
 export * from './matchUpdate';
 export * from './matchUpdateStatus';

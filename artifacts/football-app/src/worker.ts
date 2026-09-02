@@ -318,11 +318,35 @@ app.post("/api/tournaments", async (c) => {
 app.get("/api/tournaments/:id/matches", async (c) => {
   const db = drizzle(c.env.DB, { schema });
   const id = Number(c.req.param("id"));
+  const tournaments = await db
+    .select({
+      id: schema.tournamentsTable.id,
+      name: schema.tournamentsTable.name,
+      parentTournamentId: schema.tournamentsTable.parentTournamentId,
+      stageType: schema.tournamentsTable.stageType,
+    })
+    .from(schema.tournamentsTable);
+  const tournamentIds = new Set<number>([id]);
+  let added = true;
+  while (added) {
+    added = false;
+    for (const tournament of tournaments) {
+      if (
+        tournament.parentTournamentId !== null &&
+        tournamentIds.has(tournament.parentTournamentId) &&
+        !tournamentIds.has(tournament.id)
+      ) {
+        tournamentIds.add(tournament.id);
+        added = true;
+      }
+    }
+  }
+  const tournamentMap = new Map(tournaments.map((tournament) => [tournament.id, tournament]));
 
   const rows = await db
     .select()
     .from(schema.matchesTable)
-    .where(eq(schema.matchesTable.tournamentId, id))
+    .where(inArray(schema.matchesTable.tournamentId, [...tournamentIds]))
     .orderBy(schema.matchesTable.kickoffAt);
 
   const teamIds = [...new Set(rows.flatMap((m) => [m.homeTeamId, m.awayTeamId]).filter((x): x is number => x !== null))];
@@ -332,24 +356,29 @@ app.get("/api/tournaments/:id/matches", async (c) => {
   const teamMap = new Map(teams.map((t) => [t.id, t]));
   const TBD_TEAM = { id: 0, name: "TBD", shortName: "TBD", logoUrl: null, country: null, sport: "football" };
 
-  return c.json(rows.map((m) => ({
-    id: m.id,
-    homeTeam: (m.homeTeamId && teamMap.get(m.homeTeamId)) || TBD_TEAM,
-    awayTeam: (m.awayTeamId && teamMap.get(m.awayTeamId)) || TBD_TEAM,
-    homeScore: m.homeScore,
-    awayScore: m.awayScore,
-    status: m.status,
-    minute: m.minute,
-    competition: m.competition,
-    competitionLogo: m.competitionLogo,
-    kickoffAt: new Date(m.kickoffAt).toISOString(),
-    streamCount: 0,
-    featured: m.featured,
-    sport: m.sport ?? "football",
-    tournamentId: m.tournamentId,
-    venue: m.venue,
-    matchGroup: m.matchGroup,
-  })));
+  return c.json(rows.map((m) => {
+    const stage = m.tournamentId ? tournamentMap.get(m.tournamentId) : undefined;
+    return {
+      id: m.id,
+      homeTeam: (m.homeTeamId && teamMap.get(m.homeTeamId)) || TBD_TEAM,
+      awayTeam: (m.awayTeamId && teamMap.get(m.awayTeamId)) || TBD_TEAM,
+      homeScore: m.homeScore,
+      awayScore: m.awayScore,
+      status: m.status,
+      minute: m.minute,
+      competition: m.competition,
+      competitionLogo: m.competitionLogo,
+      kickoffAt: new Date(m.kickoffAt).toISOString(),
+      streamCount: 0,
+      featured: m.featured,
+      sport: m.sport ?? "football",
+      tournamentId: m.tournamentId,
+      stageName: stage?.name,
+      stageType: stage?.stageType,
+      venue: m.venue,
+      matchGroup: m.matchGroup,
+    };
+  }));
 });
 
 function computeStandings(matches: Array<{ match: any; homeTeam: any; awayTeam: any }>) {

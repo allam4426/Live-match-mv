@@ -71,6 +71,15 @@ function normalizeRound(s: string) {
   return s.toLowerCase().replace(/[-_\s]+/g, " ").trim();
 }
 
+function isFinalRound(name?: string | null) {
+  if (!name) return false;
+  const normalized = normalizeRound(name);
+  return normalized === "final" ||
+    normalized === "grand final" ||
+    normalized === "championship" ||
+    normalized === "final match";
+}
+
 function roundOrder(name: string): number {
   const n = normalizeRound(name);
   const idx = ROUND_ORDER.findIndex(r => normalizeRound(r) === n);
@@ -131,7 +140,7 @@ function TournamentFixtureRow({ match }: { match: Match }) {
         {/* Divider */}
         <div className="w-px self-stretch bg-border/40 mx-3" />
         {/* Status + group */}
-        <div className="flex flex-col items-end gap-0.5 w-[68px] shrink-0">
+        <div className="flex flex-col items-end gap-0.5 w-[86px] shrink-0">
           {isLive ? (
             <span className="text-[11px] font-black text-red-400 tabular-nums">{match.minute ? `${match.minute}'` : "Live"}</span>
           ) : isFinished ? (
@@ -142,9 +151,43 @@ function TournamentFixtureRow({ match }: { match: Match }) {
           {match.matchGroup && (
             <span className="text-[10px] text-muted-foreground/50 text-right leading-tight capitalize">{match.matchGroup}</span>
           )}
+          {match.stageName && (
+            <span className="max-w-full truncate text-[9px] font-semibold text-primary/70" title={match.stageName}>
+              {match.stageName}
+            </span>
+          )}
         </div>
       </div>
     </Link>
+  );
+}
+
+function ChampionCard({ match }: { match: Match }) {
+  const champion = match.homeScore > match.awayScore ? match.homeTeam : match.awayTeam;
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-amber-400/30 bg-gradient-to-br from-amber-400/15 via-card to-card">
+      <div className="flex items-center gap-3 px-4 py-4">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-amber-400/15 ring-1 ring-amber-400/30">
+          <Trophy className="h-6 w-6 text-amber-400" />
+        </div>
+        <TeamLogo
+          url={champion.logoUrl}
+          name={champion.name}
+          shortName={champion.shortName}
+          className="h-11 w-11 shrink-0"
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[10px] font-black uppercase tracking-[0.12em] text-amber-400">
+            {match.stageName ? `${match.stageName} champions` : "Champions"}
+          </p>
+          <p className="truncate text-base font-black text-foreground">{champion.name}</p>
+          <p className="text-[10px] text-muted-foreground">
+            Won the final {match.homeScore}–{match.awayScore}
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -634,6 +677,7 @@ export default function TournamentPage() {
         .sort((a, b) => a.name.localeCompare(b.name)) ?? []
     : childStages;
   const stageRoot = parentTournament ?? tournament;
+  const isChampionshipOverview = !parentTournament && childStages.length > 0;
 
   /* ── unique teams from matches ── */
   const teamMap = new Map<number, MatchItem["homeTeam"]>();
@@ -680,6 +724,24 @@ export default function TournamentPage() {
     const db2 = new Date(groupedMatches[b]![0]!.kickoffAt);
     return da.getTime() - db2.getTime();
   });
+
+  const finalCandidates = (matches ?? [])
+    .filter(match =>
+      match.status === "finished" &&
+      match.homeScore !== match.awayScore &&
+      isFinalRound(match.matchGroup)
+    )
+    .sort((a, b) => new Date(b.kickoffAt).getTime() - new Date(a.kickoffAt).getTime());
+  const championshipFinals = Array.from(
+    new Map(finalCandidates.map(match => [match.tournamentId ?? match.id, match])).values()
+  );
+  const liveMatches = (matches ?? []).filter(match => match.status === "live");
+  const upcomingMatches = (matches ?? [])
+    .filter(match => match.status === "scheduled" || match.status === "postponed")
+    .sort((a, b) => new Date(a.kickoffAt).getTime() - new Date(b.kickoffAt).getTime());
+  const resultMatches = (matches ?? [])
+    .filter(match => match.status === "finished")
+    .sort((a, b) => new Date(b.kickoffAt).getTime() - new Date(a.kickoffAt).getTime());
 
   /* ── tabs config ── */
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
@@ -806,6 +868,33 @@ export default function TournamentPage() {
             <div className="space-y-2">
               {[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
             </div>
+          ) : isChampionshipOverview && matches && matches.length > 0 ? (
+            <>
+              {championshipFinals.map(match => <ChampionCard key={match.id} match={match} />)}
+              {[
+                { title: "Live matches", items: liveMatches },
+                { title: "Upcoming fixtures", items: upcomingMatches },
+                { title: "Results", items: resultMatches },
+              ].map(section => section.items.length > 0 && (
+                <div key={section.title}>
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-[11px] font-black uppercase tracking-wide text-muted-foreground">
+                      {section.title}
+                    </p>
+                    <span className="text-[10px] font-semibold text-muted-foreground/60">
+                      {section.items.length}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {section.items.map(match => (
+                      <div key={match.id} className="overflow-hidden rounded-xl border border-border bg-card">
+                        <TournamentFixtureRow match={match} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </>
           ) : (matches && matches.length > 0) ? (
             (() => {
               const byDate: Record<string, typeof matches> = {};

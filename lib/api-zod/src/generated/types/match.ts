@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { MatchSport } from './matchSport';
+import type { MatchStageType } from './matchStageType';
 import type { MatchStatus } from './matchStatus';
 import type { Team } from './team';
 
@@ -31,6 +32,10 @@ export interface Match {
   venue?: string | null;
   /** @nullable */
   matchGroup?: string | null;
+  /** Tournament stage containing this match */
+  stageName?: string;
+  /** Type of tournament stage containing this match */
+  stageType?: MatchStageType;
   homeRedCards: number;
   awayRedCards: number;
   homeYellowCards: number;

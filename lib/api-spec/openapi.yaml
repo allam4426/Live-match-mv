@@ -773,7 +773,7 @@ paths:
     get:
       operationId: getTournamentMatches
       tags: [tournaments]
-      summary: Get all matches for a tournament
+      summary: Get all matches for a tournament, including descendant stages
       parameters:
         - name: id
           in: path
@@ -1676,6 +1676,13 @@ components:
           type: ["string", "null"]
         matchGroup:
           type: ["string", "null"]
+        stageName:
+          type: string
+          description: Tournament stage containing this match
+        stageType:
+          type: string
+          enum: [championship, atoll, zone, regional, final]
+          description: Type of tournament stage containing this match
         homeRedCards:
           type: integer
         awayRedCards:

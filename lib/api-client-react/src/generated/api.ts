@@ -3004,7 +3004,7 @@ export const getGetTournamentMatchesUrl = (id: number,) => {
 }
 
 /**
- * @summary Get all matches for a tournament
+ * @summary Get all matches for a tournament, including descendant stages
  */
 export const getTournamentMatches = async (id: number, options?: RequestInit): Promise<Match[]> => {
 
@@ -3051,7 +3051,7 @@ export type GetTournamentMatchesQueryError = ErrorType<unknown>
 
 
 /**
- * @summary Get all matches for a tournament
+ * @summary Get all matches for a tournament, including descendant stages
  */
 
 export function useGetTournamentMatches<TData = Awaited<ReturnType<typeof getTournamentMatches>>, TError = ErrorType<unknown>>(
