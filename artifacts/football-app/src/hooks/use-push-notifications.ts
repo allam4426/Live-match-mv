@@ -19,10 +19,6 @@ export function usePushNotifications() {
       try {
         const reg = await navigator.serviceWorker.register("/sw.js");
         let sub = await reg.pushManager.getSubscription();
-        if (!sub) {
-          if (!cancelled) setSubscribed(false);
-          return;
-        }
 
         const keyRes = await fetch("/api/push/vapid-public-key");
         if (!keyRes.ok) throw new Error("Push notifications are not configured");
@@ -33,6 +29,13 @@ export function usePushNotifications() {
         if (subscriptionKey && !keysMatch(subscriptionKey, serverKey)) {
           await sub.unsubscribe();
           sub = null;
+        }
+
+        if (!sub && Notification.permission === "granted") {
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: serverKey as unknown as ArrayBuffer,
+          });
         }
 
         if (!sub) {
