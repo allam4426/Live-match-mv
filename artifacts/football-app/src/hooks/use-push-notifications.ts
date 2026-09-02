@@ -14,11 +14,48 @@ export function usePushNotifications() {
     }
     setPermission(Notification.permission as PermissionState);
 
-    navigator.serviceWorker
-      .register("/sw.js")
-      .then((reg) => reg.pushManager.getSubscription())
-      .then((sub) => setSubscribed(!!sub))
-      .catch(() => {});
+    let cancelled = false;
+    const syncExistingSubscription = async () => {
+      try {
+        const reg = await navigator.serviceWorker.register("/sw.js");
+        let sub = await reg.pushManager.getSubscription();
+        if (!sub) {
+          if (!cancelled) setSubscribed(false);
+          return;
+        }
+
+        const keyRes = await fetch("/api/push/vapid-public-key");
+        if (!keyRes.ok) throw new Error("Push notifications are not configured");
+        const { publicKey } = await keyRes.json();
+        const serverKey = urlBase64ToUint8Array(publicKey);
+        const subscriptionKey = sub.options.applicationServerKey;
+
+        if (subscriptionKey && !keysMatch(subscriptionKey, serverKey)) {
+          await sub.unsubscribe();
+          sub = null;
+        }
+
+        if (!sub) {
+          if (!cancelled) setSubscribed(false);
+          return;
+        }
+
+        const syncRes = await fetch("/api/push/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(sub.toJSON()),
+          credentials: "include",
+        });
+        if (!syncRes.ok) throw new Error(`Subscription sync failed (${syncRes.status})`);
+        if (!cancelled) setSubscribed(true);
+      } catch (err) {
+        console.error("Push subscription sync failed:", err);
+        if (!cancelled) setSubscribed(false);
+      }
+    };
+
+    void syncExistingSubscription();
+    return () => { cancelled = true; };
   }, []);
 
   const subscribe = useCallback(async () => {
@@ -26,25 +63,33 @@ export function usePushNotifications() {
     setLoading(true);
     try {
       const keyRes = await fetch("/api/push/vapid-public-key");
-      if (!keyRes.ok) return;
+      if (!keyRes.ok) throw new Error("Push notifications are not configured");
       const { publicKey } = await keyRes.json();
+      const serverKey = urlBase64ToUint8Array(publicKey);
 
       const perm = await Notification.requestPermission();
       setPermission(perm as PermissionState);
       if (perm !== "granted") return;
 
       const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey) as unknown as ArrayBuffer,
-      });
+      let sub = await reg.pushManager.getSubscription();
+      const subscriptionKey = sub?.options.applicationServerKey;
+      if (sub && subscriptionKey && !keysMatch(subscriptionKey, serverKey)) {
+        await sub.unsubscribe();
+        sub = null;
+      }
+      sub ??= await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: serverKey as unknown as ArrayBuffer,
+        });
 
-      await fetch("/api/push/subscribe", {
+      const subscribeRes = await fetch("/api/push/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(sub.toJSON()),
         credentials: "include",
       });
+      if (!subscribeRes.ok) throw new Error(`Subscription registration failed (${subscribeRes.status})`);
       setSubscribed(true);
     } catch (err) {
       console.error("Push subscribe failed:", err);
@@ -83,4 +128,9 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
   const raw = window.atob(base64);
   return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+}
+
+function keysMatch(subscriptionKey: ArrayBuffer, serverKey: Uint8Array): boolean {
+  const current = new Uint8Array(subscriptionKey);
+  return current.length === serverKey.length && current.every((byte, index) => byte === serverKey[index]);
 }
