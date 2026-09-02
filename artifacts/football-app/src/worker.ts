@@ -745,6 +745,7 @@ app.get("/api/matches/:id/lineup", async (c) => {
   const db = drizzle(c.env.DB, { schema });
   const [match] = await db.select().from(schema.matchesTable).where(eq(schema.matchesTable.id, matchId));
   if (!match) return c.json({ error: "Match not found" }, 404);
+  await ensureMatchLineupsFromSquads(db, matchId);
   const all = await db.select().from(schema.lineupsTable).where(eq(schema.lineupsTable.matchId, matchId));
   const enriched = await attachSquadPhotos(db, all);
   return c.json({

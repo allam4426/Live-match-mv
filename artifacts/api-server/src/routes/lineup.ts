@@ -28,10 +28,43 @@ async function attachSquadPhotos(
   }));
 }
 
+async function ensureMatchLineupsFromSquads(matchId: number) {
+  const [match] = await db.select().from(matchesTable).where(eq(matchesTable.id, matchId));
+  if (!match) return;
+
+  const teamIds = [match.homeTeamId, match.awayTeamId].filter(
+    (id): id is number => id !== null,
+  );
+  if (teamIds.length === 0) return;
+
+  const existing = await db.select().from(lineupsTable).where(eq(lineupsTable.matchId, matchId));
+  const populatedTeamIds = new Set(existing.map(player => player.teamId));
+  const missingTeamIds = teamIds.filter(teamId => !populatedTeamIds.has(teamId));
+  if (missingTeamIds.length === 0) return;
+
+  const squads = await db.select().from(squadsTable).where(
+    missingTeamIds.length === 1
+      ? eq(squadsTable.teamId, missingTeamIds[0])
+      : inArray(squadsTable.teamId, missingTeamIds),
+  );
+  if (squads.length === 0) return;
+
+  await db.insert(lineupsTable).values(squads.map(player => ({
+    matchId,
+    teamId: player.teamId,
+    playerNumber: player.playerNumber,
+    playerName: player.playerName,
+    position: player.position,
+    role: player.role,
+    isStarting: player.isStarting,
+  })));
+}
+
 router.get("/matches/:id/lineup", async (req, res) => {
   const matchId = Number(req.params.id);
   const [match] = await db.select().from(matchesTable).where(eq(matchesTable.id, matchId));
   if (!match) { res.status(404).json({ error: "Match not found" }); return; }
+  await ensureMatchLineupsFromSquads(matchId);
   const all = await db.select().from(lineupsTable).where(eq(lineupsTable.matchId, matchId));
   const enriched = await attachSquadPhotos(all);
   res.json({
