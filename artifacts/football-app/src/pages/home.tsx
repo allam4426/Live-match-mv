@@ -1,4 +1,4 @@
-import { useListLiveMatches, useListMatches, useListCompetitions, useListActiveTournaments, useListSpotlights, type Match, type Spotlight } from "@workspace/api-client-react";
+import { useListLiveMatches, useListMatches, useListCompetitions, useListActiveTournaments, useListTournaments, useListSpotlights, type Match, type Spotlight } from "@workspace/api-client-react";
 import { MatchCard } from "@/components/match-card";
 import { MatchRow } from "@/components/match-row";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -176,6 +176,7 @@ export default function Home() {
   }, [refetchLive, refetchMatches]);
   const { data: competitions } = useListCompetitions();
   const { data: activeTournaments, isLoading: tournamentsLoading } = useListActiveTournaments();
+  const { data: tournaments } = useListTournaments();
 
   const stripDays = Array.from({ length: STRIP_BEFORE + STRIP_AFTER + 1 }, (_, i) =>
     addDays(selectedDate, i - STRIP_BEFORE)
@@ -448,21 +449,42 @@ export default function Home() {
             const statusCount = liveCount > 0 ? liveCount : upcomingCount > 0 ? upcomingCount : matches.length;
             const compStat = competitions?.find(c => c.name === competition);
             const tournamentId = matches[0]?.tournamentId;
-            const linkedTournament = tournamentId ? activeTournaments?.find(t => t.id === tournamentId) : undefined;
-            const logoUrl = compStat?.logoUrl || linkedTournament?.logoUrl;
+            const linkedTournament = tournamentId ? tournaments?.find(t => t.id === tournamentId) : undefined;
+            const logoUrl = linkedTournament?.logoUrl || compStat?.logoUrl;
 
             return (
               <div key={competition} className="bg-card rounded-xl overflow-hidden mx-4 border border-border">
                 <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center overflow-hidden shrink-0">
-                      {logoUrl ? (
-                        <img src={logoUrl} alt={competition} className="w-6 h-6 object-contain" />
-                      ) : (
-                        <span className="text-[9px] font-black text-muted-foreground">{competition.slice(0, 2).toUpperCase()}</span>
-                      )}
-                    </div>
-                    <span className="text-sm font-bold text-foreground">{competition}</span>
+                    {linkedTournament ? (
+                      <Link
+                        href={`/tournament/${linkedTournament.id}`}
+                        aria-label={`Open ${linkedTournament.name}`}
+                        title={`Open ${linkedTournament.name}`}
+                        className="w-7 h-7 rounded-full bg-muted flex items-center justify-center overflow-hidden shrink-0 hover:ring-2 hover:ring-primary/50 transition-all"
+                      >
+                        {logoUrl ? (
+                          <img src={logoUrl} alt={linkedTournament.name} className="w-6 h-6 object-contain" />
+                        ) : (
+                          <Trophy className="w-3.5 h-3.5" style={{ color: linkedTournament.color || undefined }} />
+                        )}
+                      </Link>
+                    ) : (
+                      <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                        {logoUrl ? (
+                          <img src={logoUrl} alt={competition} className="w-6 h-6 object-contain" />
+                        ) : (
+                          <span className="text-[9px] font-black text-muted-foreground">{competition.slice(0, 2).toUpperCase()}</span>
+                        )}
+                      </div>
+                    )}
+                    {linkedTournament ? (
+                      <Link href={`/tournament/${linkedTournament.id}`} className="text-sm font-bold text-foreground hover:text-primary transition-colors">
+                        {competition}
+                      </Link>
+                    ) : (
+                      <span className="text-sm font-bold text-foreground">{competition}</span>
+                    )}
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className={cn(
