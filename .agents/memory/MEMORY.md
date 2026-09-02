@@ -1,0 +1,1 @@
+- [Cloudflare Worker production target](cloudflare-worker-target.md) — custom-domain API traffic is bound to the `live-match` script; deploy that script, not similarly named workers.
