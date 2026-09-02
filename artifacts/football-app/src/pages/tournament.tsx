@@ -18,7 +18,7 @@ import { BannerSlot } from "@/components/banner-slot";
 import { Trophy, ChevronLeft, Calendar, GitBranch, Users, BarChart2, Layers } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { type Match } from "@workspace/api-client-react";
 
 /* ─── form dot ─── */
@@ -162,7 +162,7 @@ function TournamentFixtureRow({ match }: { match: Match }) {
   );
 }
 
-function ChampionCard({ match }: { match: Match }) {
+function ChampionCard({ match, label }: { match: Match; label?: string }) {
   const champion = match.homeScore > match.awayScore ? match.homeTeam : match.awayTeam;
 
   return (
@@ -179,7 +179,7 @@ function ChampionCard({ match }: { match: Match }) {
         />
         <div className="min-w-0 flex-1">
           <p className="truncate text-[10px] font-black uppercase tracking-[0.12em] text-amber-400">
-            {match.stageName ? `${match.stageName} champions` : "Champions"}
+            {label ?? (match.stageName ? `${match.stageName} champions` : "Champions")}
           </p>
           <p className="truncate text-base font-black text-foreground">{champion.name}</p>
           <p className="text-[10px] text-muted-foreground">
@@ -187,6 +187,62 @@ function ChampionCard({ match }: { match: Match }) {
           </p>
         </div>
       </div>
+    </div>
+  );
+}
+
+const CHAMPION_SECTIONS = [
+  { type: "atoll", label: "Atoll round champions" },
+  { type: "zone", label: "Zone round champions" },
+  { type: "regional", label: "Regional champions" },
+  { type: "tournament", label: "Tournament champions" },
+] as const;
+
+function ChampionsPanel({ matches }: { matches: Match[] }) {
+  const finalMatches = matches
+    .filter(match =>
+      match.status === "finished" &&
+      match.homeScore !== match.awayScore &&
+      isFinalRound(match.matchGroup)
+    )
+    .sort((a, b) => new Date(b.kickoffAt).getTime() - new Date(a.kickoffAt).getTime());
+
+  const matchesByStage = new Map<number, Match>();
+  for (const match of finalMatches) {
+    const stageId = match.tournamentId ?? match.id;
+    if (!matchesByStage.has(stageId)) matchesByStage.set(stageId, match);
+  }
+
+  const sections = CHAMPION_SECTIONS.map(section => {
+    const sectionMatches = Array.from(matchesByStage.values()).filter(match => {
+      if (section.type === "tournament") {
+        return match.stageType === "final" || match.stageType === "championship";
+      }
+      return match.stageType === section.type;
+    });
+    return { ...section, matches: sectionMatches };
+  }).filter(section => section.matches.length > 0);
+
+  if (sections.length === 0) return null;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Trophy className="h-4 w-4 text-amber-400" />
+        <p className="text-xs font-black uppercase tracking-wide text-foreground">Champions</p>
+      </div>
+      {sections.map(section => (
+        <div key={section.type} className="space-y-2">
+          <p className="text-[11px] font-black uppercase tracking-wide text-muted-foreground">
+            {section.label}
+          </p>
+          <div className="space-y-2">
+            {section.matches.map(match => (
+              <ChampionCard key={match.id} match={match} label={match.stageName ?? section.label} />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -617,6 +673,7 @@ export default function TournamentPage() {
 
   type Tab = "matches" | "standings" | "bracket" | "teams" | "stats";
   const [activeTab, setActiveTab] = useState<Tab>("matches");
+  useEffect(() => setActiveTab("matches"), [tournamentId]);
 
   const { data: tournament, isLoading: tLoading } = useGetTournament(tournamentId, {
     query: { enabled: !!tournamentId, queryKey: getGetTournamentQueryKey(tournamentId) },
@@ -725,16 +782,6 @@ export default function TournamentPage() {
     return da.getTime() - db2.getTime();
   });
 
-  const finalCandidates = (matches ?? [])
-    .filter(match =>
-      match.status === "finished" &&
-      match.homeScore !== match.awayScore &&
-      isFinalRound(match.matchGroup)
-    )
-    .sort((a, b) => new Date(b.kickoffAt).getTime() - new Date(a.kickoffAt).getTime());
-  const championshipFinals = Array.from(
-    new Map(finalCandidates.map(match => [match.tournamentId ?? match.id, match])).values()
-  );
   const liveMatches = (matches ?? []).filter(match => match.status === "live");
   const upcomingMatches = (matches ?? [])
     .filter(match => match.status === "scheduled" || match.status === "postponed")
@@ -746,16 +793,18 @@ export default function TournamentPage() {
   /* ── tabs config ── */
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: "matches", label: "Matches", icon: <Calendar className="w-3.5 h-3.5" /> },
-    ...(participatingTeams.length > 0
+    ...(!isChampionshipOverview && participatingTeams.length > 0
       ? [{ id: "teams" as Tab, label: "Teams", icon: <Users className="w-3.5 h-3.5" /> }]
       : []),
-    ...(isGroupStageOrKnockout(fmt)
+    ...(!isChampionshipOverview && isGroupStageOrKnockout(fmt)
       ? [{ id: "bracket" as Tab, label: "Bracket", icon: <GitBranch className="w-3.5 h-3.5" /> }]
       : []),
-    ...(!isKnockout(fmt)
+    ...(!isChampionshipOverview && !isKnockout(fmt)
       ? [{ id: "standings" as Tab, label: "Standings", icon: <Trophy className="w-3.5 h-3.5" /> }]
       : []),
-    { id: "stats", label: "Stats", icon: <BarChart2 className="w-3.5 h-3.5" /> },
+    ...(!isChampionshipOverview
+      ? [{ id: "stats" as Tab, label: "Stats", icon: <BarChart2 className="w-3.5 h-3.5" /> }]
+      : []),
   ];
 
   return (
@@ -870,7 +919,7 @@ export default function TournamentPage() {
             </div>
           ) : isChampionshipOverview && matches && matches.length > 0 ? (
             <>
-              {championshipFinals.map(match => <ChampionCard key={match.id} match={match} />)}
+              <ChampionsPanel matches={matches} />
               {[
                 { title: "Live matches", items: liveMatches },
                 { title: "Upcoming fixtures", items: upcomingMatches },
