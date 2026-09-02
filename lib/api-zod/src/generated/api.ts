@@ -760,6 +760,7 @@ export const ListActiveTournamentsResponseItem = zod.object({
   "matchStatus": zod.enum(['live', 'ongoing', 'upcoming', 'finished']),
   "matchCount": zod.number(),
   "liveCount": zod.number().optional(),
+  "stageCount": zod.number().describe('Number of child tournament stages grouped under this parent'),
   "color": zod.string().nullish(),
   "qualificationZones": zod.array(zod.object({
   "fromPos": zod.number().describe('Position from top (1=first). Use negative to count from bottom (-1=last place)'),

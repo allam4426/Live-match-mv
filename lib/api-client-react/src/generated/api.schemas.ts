@@ -261,6 +261,8 @@ export interface TournamentWithStatus {
   matchStatus: TournamentWithStatusMatchStatus;
   matchCount: number;
   liveCount?: number;
+  /** Number of child tournament stages grouped under this parent */
+  stageCount: number;
   /** @nullable */
   color?: string | null;
   qualificationZones?: QualificationZone[] | null;

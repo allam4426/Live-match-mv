@@ -273,12 +273,22 @@ app.get("/api/tournaments/active", async (c) => {
   if (sport && sport !== "all") {
     tournaments = tournaments.filter((t) => t.sport === sport);
   }
+  const childrenByParent = new Map<number, number[]>();
+  for (const tournament of tournaments) {
+    if (tournament.parentTournamentId !== null) {
+      const children = childrenByParent.get(tournament.parentTournamentId) ?? [];
+      children.push(tournament.id);
+      childrenByParent.set(tournament.parentTournamentId, children);
+    }
+  }
+  const parentTournaments = tournaments.filter((t) => t.parentTournamentId === null);
 
-  const results = await Promise.all(tournaments.map(async (t) => {
+  const results = await Promise.all(parentTournaments.map(async (t) => {
+    const tournamentIds = [t.id, ...(childrenByParent.get(t.id) ?? [])];
     const allMatches = await db
       .select()
       .from(schema.matchesTable)
-      .where(eq(schema.matchesTable.tournamentId, t.id));
+      .where(inArray(schema.matchesTable.tournamentId, tournamentIds));
 
     const total = allMatches.length;
     const liveCount = allMatches.filter((m) => m.status === "live").length;
@@ -291,7 +301,7 @@ app.get("/api/tournaments/active", async (c) => {
     else if (scheduledCount > 0) matchStatus = "upcoming";
     else matchStatus = "finished";
 
-    return { ...t, matchStatus, matchCount: total, liveCount };
+    return { ...t, matchStatus, matchCount: total, liveCount, stageCount: childrenByParent.get(t.id)?.length ?? 0 };
   }));
 
   return c.json(results.filter((r) => r.matchCount > 0));

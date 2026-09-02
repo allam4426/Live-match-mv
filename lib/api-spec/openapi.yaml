@@ -1476,7 +1476,7 @@ components:
 
     TournamentWithStatus:
       type: object
-      required: [id, name, sport, season, active, format, matchStatus, matchCount]
+      required: [id, name, sport, season, active, format, matchStatus, matchCount, stageCount]
       properties:
         id:
           type: integer
@@ -1506,6 +1506,9 @@ components:
           type: integer
         liveCount:
           type: integer
+        stageCount:
+          type: integer
+          description: "Number of child tournament stages grouped under this parent"
         color:
           type: ["string", "null"]
         qualificationZones:

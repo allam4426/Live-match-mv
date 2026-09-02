@@ -62,7 +62,9 @@ export default function TournamentsPage() {
             </span>
             <div className="flex items-center gap-1 text-muted-foreground">
               <Layers className="w-3 h-3" />
-              <span className="text-[10px] font-semibold">{FORMAT_LABELS[t.format] ?? t.format}</span>
+              <span className="text-[10px] font-semibold">
+                {t.stageCount ? `${t.stageCount} stage${t.stageCount === 1 ? "" : "s"}` : FORMAT_LABELS[t.format] ?? t.format}
+              </span>
             </div>
           </div>
 

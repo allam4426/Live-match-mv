@@ -29,17 +29,27 @@ router.get("/tournaments/active", async (req, res) => {
   if (sport && sport !== "all") {
     tournaments = tournaments.filter(t => t.sport === sport);
   }
+  const childrenByParent = new Map<number, number[]>();
+  for (const tournament of tournaments) {
+    if (tournament.parentTournamentId !== null) {
+      const children = childrenByParent.get(tournament.parentTournamentId) ?? [];
+      children.push(tournament.id);
+      childrenByParent.set(tournament.parentTournamentId, children);
+    }
+  }
+  const parentTournaments = tournaments.filter(t => t.parentTournamentId === null);
 
   const homeTeam = alias(teamsTable, "homeTeam");
   const awayTeam = alias(teamsTable, "awayTeam");
 
-  const results = await Promise.all(tournaments.map(async (t) => {
+  const results = await Promise.all(parentTournaments.map(async (t) => {
+    const tournamentIds = [t.id, ...(childrenByParent.get(t.id) ?? [])];
     const allMatches = await db
       .select({ match: matchesTable, homeTeam, awayTeam })
       .from(matchesTable)
       .leftJoin(homeTeam, eq(matchesTable.homeTeamId, homeTeam.id))
       .leftJoin(awayTeam, eq(matchesTable.awayTeamId, awayTeam.id))
-      .where(eq(matchesTable.tournamentId, t.id));
+      .where(inArray(matchesTable.tournamentId, tournamentIds));
 
     const total = allMatches.length;
     const liveCount = allMatches.filter(m => m.match.status === "live").length;
@@ -57,6 +67,7 @@ router.get("/tournaments/active", async (req, res) => {
       matchStatus,
       matchCount: total,
       liveCount,
+      stageCount: childrenByParent.get(t.id)?.length ?? 0,
     };
   }));
 

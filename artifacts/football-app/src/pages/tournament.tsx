@@ -3,6 +3,7 @@ import {
   useGetTournamentStandings,
   useGetTournamentMatches,
   useGetTournamentTopScorers,
+  useListTournaments,
   getGetTournamentQueryKey,
   getGetTournamentStandingsQueryKey,
   getGetTournamentMatchesQueryKey,
@@ -14,7 +15,7 @@ import { useParams, Link } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TeamLogo } from "@/components/team-logo";
 import { BannerSlot } from "@/components/banner-slot";
-import { Trophy, ChevronLeft, Calendar, GitBranch, Users, BarChart2 } from "lucide-react";
+import { Trophy, ChevronLeft, Calendar, GitBranch, Users, BarChart2, Layers } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -577,6 +578,7 @@ export default function TournamentPage() {
   const { data: tournament, isLoading: tLoading } = useGetTournament(tournamentId, {
     query: { enabled: !!tournamentId, queryKey: getGetTournamentQueryKey(tournamentId) },
   });
+  const { data: allTournaments } = useListTournaments();
   const { data: matches, isLoading: mLoading } = useGetTournamentMatches(tournamentId, {
     query: { enabled: !!tournamentId, queryKey: getGetTournamentMatchesQueryKey(tournamentId) },
   });
@@ -618,6 +620,20 @@ export default function TournamentPage() {
 
   const fmt = tournament.format;
   const isGroupStage = fmt === "group_stage";
+  const parentTournament = tournament.parentTournamentId
+    ? allTournaments?.find(t => t.id === tournament.parentTournamentId)
+    : undefined;
+  const childStages = allTournaments
+    ?.filter(t => t.parentTournamentId === tournament.id)
+    .sort((a, b) => {
+      const order: Record<string, number> = { atoll: 1, zone: 2, regional: 3, final: 4 };
+      return (order[a.stageType ?? ""] ?? 99) - (order[b.stageType ?? ""] ?? 99) || a.name.localeCompare(b.name);
+    }) ?? [];
+  const siblingStages = parentTournament
+    ? allTournaments?.filter(t => t.parentTournamentId === parentTournament.id)
+        .sort((a, b) => a.name.localeCompare(b.name)) ?? []
+    : childStages;
+  const stageRoot = parentTournament ?? tournament;
 
   /* ── unique teams from matches ── */
   const teamMap = new Map<number, MatchItem["homeTeam"]>();
@@ -733,6 +749,37 @@ export default function TournamentPage() {
 
       {/* Ad banner */}
       <BannerSlot position="top_home" />
+
+      {(childStages.length > 0 || parentTournament) && (
+        <div className="mx-4 mt-4 rounded-xl border border-border bg-card p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Layers className="w-4 h-4 text-primary" />
+            <p className="text-xs font-black text-foreground uppercase tracking-wide">
+              {parentTournament ? parentTournament.name : "Championship stages"}
+            </p>
+          </div>
+          <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-0.5">
+            <Link href={`/tournament/${stageRoot.id}`}>
+              <span className={cn(
+                "inline-flex items-center whitespace-nowrap rounded-full border px-3 py-1.5 text-[11px] font-bold cursor-pointer",
+                !parentTournament ? "border-primary bg-primary text-white" : "border-border text-muted-foreground hover:border-primary/50"
+              )}>
+                Overview
+              </span>
+            </Link>
+            {siblingStages.map(stage => (
+              <Link key={stage.id} href={`/tournament/${stage.id}`}>
+                <span className={cn(
+                  "inline-flex items-center whitespace-nowrap rounded-full border px-3 py-1.5 text-[11px] font-bold cursor-pointer",
+                  stage.id === tournament.id ? "border-primary bg-primary text-white" : "border-border text-muted-foreground hover:border-primary/50"
+                )}>
+                  {stage.name}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Tabs — text underline style */}
       <div className="flex items-center border-b border-border/50 mt-4 overflow-x-auto hide-scrollbar">
