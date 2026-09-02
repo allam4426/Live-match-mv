@@ -1,4 +1,4 @@
-import { pgTable, serial, text, boolean, json } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, boolean, json } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -9,6 +9,9 @@ export const QualificationZoneSchema = z.object({
   label: z.string(),
 });
 export type QualificationZone = z.infer<typeof QualificationZoneSchema>;
+
+export const TournamentStageSchema = z.enum(["championship", "atoll", "zone", "regional", "final"]);
+export type TournamentStage = z.infer<typeof TournamentStageSchema>;
 
 export const tournamentsTable = pgTable("tournaments", {
   id: serial("id").primaryKey(),
@@ -22,6 +25,8 @@ export const tournamentsTable = pgTable("tournaments", {
   singleGroupFormat: text("single_group_format"),
   color: text("color"),
   qualificationZones: json("qualification_zones").$type<QualificationZone[]>(),
+  parentTournamentId: integer("parent_tournament_id"),
+  stageType: text("stage_type").$type<TournamentStage>().default("championship"),
 });
 
 export const insertTournamentSchema = createInsertSchema(tournamentsTable).omit({ id: true });

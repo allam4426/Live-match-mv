@@ -14,7 +14,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TeamLogo } from "@/components/team-logo";
 import { LivePulse } from "@/components/live-pulse";
-import { ChevronLeft, Play, Share2, Check, Bell, BellOff } from "lucide-react";
+import { ChevronLeft, Play, Share2, Check, Bell, BellOff, CalendarDays, Swords } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { PenaltyIcon } from "@/components/penalty-icon";
@@ -178,7 +178,452 @@ function useLiveStopwatch(
 }
 
 /* ─── tabs ─── */
-type Tab = "Summary" | "Squad" | "Standings";
+type Tab = "Summary" | "Stats" | "Squad" | "Standings";
+
+type H2HMatch = {
+  id: number;
+  homeScore: number | null;
+  awayScore: number | null;
+  status: string;
+  kickoffAt: string;
+  competition: string;
+  homeTeam: { id: number; name: string; logoUrl: string | null; shortName: string | null } | null;
+  awayTeam: { id: number; name: string; logoUrl: string | null; shortName: string | null } | null;
+};
+
+function useHeadToHead(homeTeamId: number, awayTeamId: number) {
+  const [matches, setMatches] = useState<H2HMatch[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!homeTeamId || !awayTeamId) return;
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/api/teams/${homeTeamId}/matches`)
+      .then((response) => {
+        if (!response.ok) throw new Error("Unable to load previous meetings");
+        return response.json() as Promise<H2HMatch[]>;
+      })
+      .then((rows) => {
+        if (cancelled) return;
+        const previousMeetings = rows
+          .filter((row) =>
+            row.status === "finished"
+            && (row.homeTeam?.id === awayTeamId || row.awayTeam?.id === awayTeamId),
+          )
+          .sort((a, b) => new Date(b.kickoffAt).getTime() - new Date(a.kickoffAt).getTime());
+        setMatches(previousMeetings.slice(0, 5));
+      })
+      .catch(() => {
+        if (!cancelled) setMatches([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [homeTeamId, awayTeamId]);
+
+  return { matches, loading };
+}
+
+function H2HSection({
+  homeTeam,
+  awayTeam,
+}: {
+  homeTeam: MatchDetail["homeTeam"];
+  awayTeam: MatchDetail["awayTeam"];
+}) {
+  const { matches, loading } = useHeadToHead(homeTeam.id, awayTeam.id);
+  const homeWins = matches.filter((match) => (match.homeTeam?.id === homeTeam.id
+    ? (match.homeScore ?? 0) > (match.awayScore ?? 0)
+    : (match.awayScore ?? 0) > (match.homeScore ?? 0))).length;
+  const awayWins = matches.filter((match) => (match.homeTeam?.id === homeTeam.id
+    ? (match.awayScore ?? 0) > (match.homeScore ?? 0)
+    : (match.homeScore ?? 0) > (match.awayScore ?? 0))).length;
+  const draws = matches.length - homeWins - awayWins;
+  const homeGoals = matches.reduce((total, match) =>
+    total + (match.homeTeam?.id === homeTeam.id ? match.homeScore ?? 0 : match.awayScore ?? 0), 0);
+  const awayGoals = matches.reduce((total, match) =>
+    total + (match.homeTeam?.id === homeTeam.id ? match.awayScore ?? 0 : match.homeScore ?? 0), 0);
+
+  return (
+    <section className="bg-card border border-border rounded-xl overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/20">
+        <Swords className="w-4 h-4 text-primary" />
+        <div>
+          <h2 className="text-sm font-black text-foreground">Head-to-head</h2>
+          <p className="text-[10px] text-muted-foreground">Previous meetings between these teams</p>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="grid grid-cols-3 gap-2 p-3">
+          <Skeleton className="h-16 rounded-lg" />
+          <Skeleton className="h-16 rounded-lg" />
+          <Skeleton className="h-16 rounded-lg" />
+        </div>
+      ) : matches.length === 0 ? (
+        <div className="px-4 py-8 text-center">
+          <Swords className="w-7 h-7 mx-auto mb-2 text-muted-foreground/40" />
+          <p className="text-sm font-semibold text-muted-foreground">No previous meetings</p>
+          <p className="text-[11px] text-muted-foreground/70 mt-1">This is the first recorded match between these teams.</p>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-3 gap-2 p-3">
+            {[
+              { value: homeWins, label: homeTeam.shortName || homeTeam.name, tone: "text-primary" },
+              { value: draws, label: "Draws", tone: "text-muted-foreground" },
+              { value: awayWins, label: awayTeam.shortName || awayTeam.name, tone: "text-blue-400" },
+            ].map((stat) => (
+              <div key={stat.label} className="rounded-lg bg-muted/25 px-2 py-2.5 text-center">
+                <p className={cn("text-xl font-black tabular-nums", stat.tone)}>{stat.value}</p>
+                <p className="text-[9px] text-muted-foreground font-semibold truncate" title={stat.label}>{stat.label}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-center gap-4 px-4 pb-3 text-[10px] text-muted-foreground">
+            <span><strong className="text-foreground">{homeGoals}</strong> goals · {homeTeam.shortName || homeTeam.name}</span>
+            <span className="text-border">|</span>
+            <span><strong className="text-foreground">{awayGoals}</strong> goals · {awayTeam.shortName || awayTeam.name}</span>
+            <span className="text-border">|</span>
+            <span><strong className="text-foreground">{(homeGoals + awayGoals) / matches.length}</strong> avg/game</span>
+          </div>
+
+          <div className="border-t border-border/60">
+            <div className="flex items-center gap-1.5 px-4 py-2 bg-muted/15">
+              <CalendarDays className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-[10px] font-black text-muted-foreground uppercase tracking-wider">Last {matches.length} meetings</span>
+            </div>
+            {matches.map((match) => {
+              const homeIsCurrentHome = match.homeTeam?.id === homeTeam.id;
+              const currentHomeScore = homeIsCurrentHome ? match.homeScore : match.awayScore;
+              const currentAwayScore = homeIsCurrentHome ? match.awayScore : match.homeScore;
+              return (
+                <div key={match.id} className="flex items-center gap-3 px-4 py-2.5 border-t border-border/40">
+                  <span className="text-[10px] text-muted-foreground tabular-nums w-[68px] shrink-0">
+                    {format(new Date(match.kickoffAt), "d MMM yyyy")}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-semibold text-foreground truncate">
+                      {match.homeTeam?.shortName || match.homeTeam?.name || "Home"}
+                      <span className="text-muted-foreground mx-1">vs</span>
+                      {match.awayTeam?.shortName || match.awayTeam?.name || "Away"}
+                    </p>
+                    <p className="text-[9px] text-muted-foreground truncate">{match.competition}</p>
+                  </div>
+                  <span className="text-sm font-black tabular-nums text-foreground">{currentHomeScore ?? 0}–{currentAwayScore ?? 0}</span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function useRecentTeamMatches(teamId: number) {
+  const [matches, setMatches] = useState<H2HMatch[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!teamId) return;
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/api/teams/${teamId}/matches`)
+      .then((response) => {
+        if (!response.ok) throw new Error("Unable to load recent matches");
+        return response.json() as Promise<H2HMatch[]>;
+      })
+      .then((rows) => {
+        if (!cancelled) {
+          setMatches(rows.filter((row) => row.status === "finished").slice(0, 5));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setMatches([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [teamId]);
+
+  return { matches, loading };
+}
+
+function getTeamMatchValues(match: H2HMatch, teamId: number) {
+  const isHome = match.homeTeam?.id === teamId;
+  const scored = isHome ? match.homeScore ?? 0 : match.awayScore ?? 0;
+  const conceded = isHome ? match.awayScore ?? 0 : match.homeScore ?? 0;
+  const opponent = isHome ? match.awayTeam : match.homeTeam;
+  const result = scored > conceded ? "W" : scored < conceded ? "L" : "D";
+  return { scored, conceded, opponent, result };
+}
+
+function RecentFormCard({
+  team,
+  matches,
+  loading,
+}: {
+  team: MatchDetail["homeTeam"];
+  matches: H2HMatch[];
+  loading: boolean;
+}) {
+  const results = matches.map((row) => getTeamMatchValues(row, team.id).result);
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-lg shadow-black/10 dark:border-white/5 dark:bg-[#191b1f]">
+      <div className="flex items-center justify-between gap-3 px-3.5 py-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <TeamLogo
+            url={team.logoUrl}
+            name={team.name}
+            shortName={team.shortName}
+            className="h-8 w-8"
+          />
+          <span className="truncate text-xs font-black text-foreground">{team.name}</span>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {loading
+            ? Array.from({ length: 5 }).map((_, index) => (
+                <Skeleton key={index} className="h-5 w-5 rounded-full" />
+              ))
+            : results.slice().reverse().map((result, index) => (
+                <FormDot key={`${result}-${index}`} result={result} />
+              ))}
+        </div>
+      </div>
+
+      <div className="flex items-stretch gap-2 overflow-x-auto border-t border-border px-3 py-2.5 dark:border-white/5">
+        {loading ? (
+          Array.from({ length: 3 }).map((_, index) => (
+            <Skeleton key={index} className="h-12 min-w-28 rounded-xl" />
+          ))
+        ) : matches.length === 0 ? (
+          <p className="py-3 text-xs text-muted-foreground">No recent results</p>
+        ) : (
+          <>
+            {matches.slice(0, 3).map((row) => {
+              const values = getTeamMatchValues(row, team.id);
+              return (
+                <Link key={row.id} href={`/match/${row.id}`}>
+                  <div className="flex min-w-28 cursor-pointer items-center justify-center gap-2 rounded-xl bg-muted px-3 py-2 transition-colors hover:bg-muted/80 dark:bg-black/20 dark:hover:bg-black/30">
+                    <TeamLogo
+                      url={values.opponent?.logoUrl ?? ""}
+                      name={values.opponent?.name ?? "Opponent"}
+                      shortName={values.opponent?.shortName ?? null}
+                      className="h-6 w-6"
+                    />
+                    <span className="text-xs font-black tabular-nums text-foreground">
+                      {values.scored}–{values.conceded}
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
+            <Link href={`/team/${team.id}`}>
+              <div className="flex h-full min-w-24 cursor-pointer items-center justify-center rounded-xl bg-muted px-3 text-[10px] font-bold text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground dark:bg-white/5 dark:hover:bg-white/10">
+                View all
+              </div>
+            </Link>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+type TeamFormSummary = {
+  goalsScored: number;
+  goalsConceded: number;
+  wins: number;
+  points: number;
+};
+
+function summarizeRecentMatches(matches: H2HMatch[], teamId: number): TeamFormSummary {
+  return matches.reduce<TeamFormSummary>((summary, row) => {
+    const { scored, conceded, result } = getTeamMatchValues(row, teamId);
+    summary.goalsScored += scored;
+    summary.goalsConceded += conceded;
+    if (result === "W") {
+      summary.wins += 1;
+      summary.points += 3;
+    } else if (result === "D") {
+      summary.points += 1;
+    }
+    return summary;
+  }, { goalsScored: 0, goalsConceded: 0, wins: 0, points: 0 });
+}
+
+function ComparisonMetric({
+  label,
+  homeValue,
+  awayValue,
+  decimals = false,
+  lowerIsBetter = false,
+}: {
+  label: string;
+  homeValue: number;
+  awayValue: number;
+  decimals?: boolean;
+  lowerIsBetter?: boolean;
+}) {
+  const maximum = Math.max(homeValue, awayValue, 1);
+  const homeBetter = lowerIsBetter ? homeValue < awayValue : homeValue > awayValue;
+  const awayBetter = lowerIsBetter ? awayValue < homeValue : awayValue > homeValue;
+  const display = (value: number) => decimals ? value.toFixed(1) : String(value);
+
+  return (
+    <div className="px-4 py-3">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-xs">
+        <span className="font-bold tabular-nums text-foreground">{display(homeValue)}</span>
+        <span className="text-center text-[11px] font-medium text-muted-foreground">{label}</span>
+        <span className="text-right font-bold tabular-nums text-foreground">{display(awayValue)}</span>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <div className="flex h-2 justify-end overflow-hidden rounded-full bg-secondary dark:bg-white/10">
+          <div
+            className={cn("h-full rounded-full", homeBetter ? "bg-emerald-500 dark:bg-emerald-400" : "bg-slate-300 dark:bg-white/60")}
+            style={{ width: `${Math.max(8, (homeValue / maximum) * 100)}%` }}
+          />
+        </div>
+        <div className="h-2 overflow-hidden rounded-full bg-secondary dark:bg-white/10">
+          <div
+            className={cn("h-full rounded-full", awayBetter ? "bg-emerald-500 dark:bg-emerald-400" : "bg-slate-300 dark:bg-white/60")}
+            style={{ width: `${Math.max(8, (awayValue / maximum) * 100)}%` }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TeamStatsSection({ match }: { match: MatchDetail }) {
+  const homeHistory = useRecentTeamMatches(match.homeTeam.id);
+  const awayHistory = useRecentTeamMatches(match.awayTeam.id);
+  const homeSummary = summarizeRecentMatches(homeHistory.matches, match.homeTeam.id);
+  const awaySummary = summarizeRecentMatches(awayHistory.matches, match.awayTeam.id);
+  const homeGames = Math.max(homeHistory.matches.length, 1);
+  const awayGames = Math.max(awayHistory.matches.length, 1);
+  const loading = homeHistory.loading || awayHistory.loading;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="mb-2 px-1 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">Form</p>
+        <div className="space-y-2">
+          <RecentFormCard team={match.homeTeam} matches={homeHistory.matches} loading={homeHistory.loading} />
+          <RecentFormCard team={match.awayTeam} matches={awayHistory.matches} loading={awayHistory.loading} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        {[match.homeTeam, match.awayTeam].map((team, index) => (
+          <div
+            key={team.id}
+            className={cn(
+              "flex items-center gap-2 rounded-xl border border-border px-3 py-3 dark:border-white/5",
+              index === 0
+                ? "bg-gradient-to-r from-primary/20 to-card dark:to-[#191b1f]"
+                : "bg-gradient-to-l from-red-500/15 to-card dark:to-[#191b1f]",
+            )}
+          >
+            <TeamLogo
+              url={team.logoUrl}
+              name={team.name}
+              shortName={team.shortName}
+              className="h-8 w-8"
+            />
+            <span className="min-w-0 truncate text-xs font-black text-foreground">
+              {team.shortName || team.name}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-xl shadow-black/10 dark:border-white/5 dark:bg-[#191b1f]">
+        <div className="border-b border-border px-4 py-3 text-center dark:border-white/10">
+          <h2 className="text-sm font-black text-foreground">Last 5 matches</h2>
+        </div>
+        {loading ? (
+          <div className="space-y-4 p-4">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <Skeleton key={index} className="h-10 w-full rounded-lg" />
+            ))}
+          </div>
+        ) : (
+          <div className="divide-y divide-border dark:divide-white/5">
+            <ComparisonMetric
+              label="Goals scored"
+              homeValue={homeSummary.goalsScored / homeGames}
+              awayValue={awaySummary.goalsScored / awayGames}
+              decimals
+            />
+            <ComparisonMetric
+              label="Goals conceded"
+              homeValue={homeSummary.goalsConceded / homeGames}
+              awayValue={awaySummary.goalsConceded / awayGames}
+              decimals
+              lowerIsBetter
+            />
+            <ComparisonMetric
+              label="Wins"
+              homeValue={homeSummary.wins}
+              awayValue={awaySummary.wins}
+            />
+            <ComparisonMetric
+              label="Points"
+              homeValue={homeSummary.points}
+              awayValue={awaySummary.points}
+            />
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function StatsTab({ match }: { match: MatchDetail }) {
+  const [section, setSection] = useState<"Team" | "H2H">("Team");
+
+  return (
+    <div className="-mx-4">
+      <div className="grid grid-cols-2 border-b border-border bg-card/40">
+        {(["Team", "H2H"] as const).map((item) => (
+          <button
+            key={item}
+            onClick={() => setSection(item)}
+            className={cn(
+              "relative py-3 text-xs font-bold transition-colors",
+              section === item ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {item}
+            {section === item && (
+              <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-foreground" />
+            )}
+          </button>
+        ))}
+      </div>
+      <div className="px-3 py-4 sm:px-4">
+        {section === "Team" ? (
+          <TeamStatsSection match={match} />
+        ) : (
+          <H2HSection homeTeam={match.homeTeam} awayTeam={match.awayTeam} />
+        )}
+      </div>
+    </div>
+  );
+}
 
 /* ─── Summary ─── */
 
@@ -1497,6 +1942,7 @@ export default function MatchDetails() {
 
   const tabs: Tab[] = [
     "Summary",
+    "Stats",
     "Squad",
     ...(hasTournament ? ["Standings" as Tab] : []),
   ];
@@ -1775,6 +2221,7 @@ export default function MatchDetails() {
       {/* ── Tab content ── */}
       <div className="mx-4 mt-2">
         {activeTab === "Summary" && <SummaryTab match={match} />}
+        {activeTab === "Stats" && <StatsTab match={match} />}
         {activeTab === "Squad" && <SquadTab matchId={matchId} match={match} />}
         {activeTab === "Standings" && hasTournament && (
           <StandingsTab

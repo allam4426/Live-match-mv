@@ -7,11 +7,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Trash2, Plus, X, Pencil, Check, Crown, UserCog } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ExistingPlayer, PlayerDatabasePicker } from "@/components/admin/player-database-picker";
 
 type Role = "player" | "captain" | "coach";
 
 const POSITIONS = ["GK", "CB", "LB", "RB", "LWB", "RWB", "CDM", "CM", "CAM", "LM", "RM", "LW", "RW", "ST", "CF", "SS"];
-const EMPTY = { playerNumber: "", playerName: "", position: "", role: "player" as Role, isStarting: true };
+const EMPTY = { playerNumber: "", playerName: "", playerCode: "", position: "", role: "player" as Role, isStarting: true };
 
 const ROLE_CONFIG: Record<Role, { label: string; icon: React.ElementType; className: string }> = {
   player:  { label: "Player",  icon: () => <span className="text-[10px]">⚽</span>, className: "text-muted-foreground bg-muted border-border" },
@@ -95,6 +96,8 @@ export function SquadPanel({ teamId, teamName }: { teamId: number; teamName: str
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ ...EMPTY });
+  const [selectedExisting, setSelectedExisting] = useState<ExistingPlayer | null>(null);
+  const [formError, setFormError] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
 
   const { data: squad, isLoading } = useGetTeamSquad(teamId, {
@@ -108,14 +111,26 @@ export function SquadPanel({ teamId, teamName }: { teamId: number; teamName: str
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.playerName) return;
+    if (selectedExisting?.teamId === teamId) {
+      setFormError("This player is already on this team.");
+      return;
+    }
+    setFormError("");
     addPlayer.mutate({
       id: teamId,
       data: {
         ...form,
         playerNumber: form.playerNumber || undefined,
+        playerCode: form.playerCode || undefined,
         position: form.position || undefined,
       }
-    }, { onSuccess: () => { setForm({ ...EMPTY }); setShowForm(false); invalidate(); } });
+    }, { onSuccess: () => {
+      setForm({ ...EMPTY });
+      setSelectedExisting(null);
+      setFormError("");
+      setShowForm(false);
+      invalidate();
+    } });
   };
 
   const handleRemove = (playerId: number) => {
@@ -143,7 +158,11 @@ export function SquadPanel({ teamId, teamName }: { teamId: number; teamName: str
           <p className="text-xs font-bold text-foreground">{teamName} Squad</p>
           <p className="text-[10px] text-muted-foreground">{squad?.length ?? 0} members</p>
         </div>
-        <button onClick={() => setShowForm(!showForm)}
+        <button onClick={() => {
+          setShowForm(!showForm);
+          setSelectedExisting(null);
+          setFormError("");
+        }}
           className="flex items-center gap-1 bg-primary text-white rounded-xl px-2.5 py-1.5 text-[10px] font-bold">
           {showForm ? <X className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
           {showForm ? "Cancel" : "Add"}
@@ -153,10 +172,32 @@ export function SquadPanel({ teamId, teamName }: { teamId: number; teamName: str
       {/* Add form */}
       {showForm && (
         <form onSubmit={handleAdd} className="px-4 py-3 bg-card border-b border-border space-y-2">
+          <PlayerDatabasePicker
+            selectedPlayer={selectedExisting}
+            onSelect={(player) => {
+              setSelectedExisting(player);
+              setForm(f => ({
+                ...f,
+                playerName: player.playerName,
+                playerCode: player.playerCode ?? "",
+                position: player.position ?? "",
+              }));
+              setFormError("");
+            }}
+            onClear={() => {
+              setSelectedExisting(null);
+              setForm(f => ({ ...f, playerName: "", playerCode: "", position: "" }));
+              setFormError("");
+            }}
+          />
+          {formError && <p className="text-xs font-semibold text-red-400">{formError}</p>}
           <div className="grid grid-cols-3 gap-1.5">
             <input value={form.playerNumber} onChange={e => setForm(f => ({ ...f, playerNumber: e.target.value }))}
               placeholder="#" className="admin-input text-center" />
-            <input value={form.playerName} onChange={e => setForm(f => ({ ...f, playerName: e.target.value }))}
+            <input value={form.playerName} onChange={e => {
+              setSelectedExisting(null);
+              setForm(f => ({ ...f, playerName: e.target.value }));
+            }}
               placeholder="Full name *" className="admin-input col-span-2" />
           </div>
           <div className="grid grid-cols-3 gap-1.5">
@@ -175,6 +216,11 @@ export function SquadPanel({ teamId, teamName }: { teamId: number; teamName: str
               Starting
             </label>
           </div>
+          <input value={form.playerCode} onChange={e => {
+            setSelectedExisting(null);
+            setForm(f => ({ ...f, playerCode: e.target.value }));
+          }}
+            placeholder="Player code (optional)" className="admin-input" />
           <button type="submit" disabled={addPlayer.isPending}
             className="w-full bg-primary text-white rounded-xl py-2 text-xs font-bold disabled:opacity-50">
             {addPlayer.isPending ? "Adding..." : "Add to Squad"}

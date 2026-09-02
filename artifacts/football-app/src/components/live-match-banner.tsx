@@ -42,7 +42,15 @@ function BannerCard({ match, dim }: { match: Match; dim?: boolean }) {
         "relative overflow-hidden cursor-pointer transition-all active:scale-[0.99]",
         "featured-gradient rounded-2xl border border-white/10 shadow-2xl",
         dim && "opacity-50"
-      )}>
+      )}
+        style={{
+          backgroundImage:
+            "linear-gradient(135deg, rgba(18, 28, 42, 0.62) 0%, rgba(9, 25, 36, 0.68) 52%, rgba(18, 10, 28, 0.72) 100%), url('/live-match-pattern.jpg')",
+          backgroundSize: "100% 100%, auto 100%",
+          backgroundRepeat: "no-repeat, repeat-x",
+          backgroundPosition: "center",
+        }}
+      >
         {/* Glow orbs */}
         <div className="absolute -top-8 -left-8 w-40 h-40 rounded-full bg-teal-400/10 blur-3xl pointer-events-none" />
         <div className="absolute -bottom-8 -right-8 w-40 h-40 rounded-full bg-cyan-400/8 blur-3xl pointer-events-none" />

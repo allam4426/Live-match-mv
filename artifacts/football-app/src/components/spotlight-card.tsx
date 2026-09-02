@@ -25,7 +25,14 @@ export function SpotlightCard({ match }: { match: Match }) {
   return (
     <motion.div whileHover={{ scale: 1.01 }} transition={{ duration: 0.15 }}>
       <Link href={`/match/${match.id}`}>
-        <div className="spotlight-gradient rounded-2xl overflow-hidden cursor-pointer border border-white/8 shadow-2xl relative mx-4">
+        <div
+          className="spotlight-gradient rounded-2xl overflow-hidden cursor-pointer border border-white/15 shadow-2xl relative mx-4 bg-center bg-no-repeat"
+          style={{
+            backgroundImage:
+              "linear-gradient(145deg, rgba(24, 7, 20, 0.78) 0%, rgba(10, 18, 28, 0.68) 52%, rgba(8, 10, 18, 0.84) 100%), url('/spotlight-stadium.png')",
+            backgroundSize: "100% 100%",
+          }}
+        >
 
           {/* Top bar: label + status */}
           <div className="flex items-center justify-between px-4 pt-4 pb-0">

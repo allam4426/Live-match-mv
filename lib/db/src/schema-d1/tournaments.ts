@@ -10,6 +10,9 @@ export const QualificationZoneSchema = z.object({
 });
 export type QualificationZone = z.infer<typeof QualificationZoneSchema>;
 
+export const TournamentStageSchema = z.enum(["championship", "atoll", "zone", "regional", "final"]);
+export type TournamentStage = z.infer<typeof TournamentStageSchema>;
+
 export const tournamentsTable = sqliteTable("tournaments", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
@@ -22,6 +25,8 @@ export const tournamentsTable = sqliteTable("tournaments", {
   singleGroupFormat: text("single_group_format"),
   color: text("color"),
   qualificationZones: text("qualification_zones", { mode: "json" }).$type<QualificationZone[]>(),
+  parentTournamentId: integer("parent_tournament_id"),
+  stageType: text("stage_type").$type<TournamentStage>().default("championship"),
 });
 
 export const insertTournamentSchema = createInsertSchema(tournamentsTable).omit({ id: true });

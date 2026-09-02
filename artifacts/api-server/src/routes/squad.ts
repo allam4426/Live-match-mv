@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, squadsTable, matchEventsTable, teamsTable, lineupsTable, matchesTable, tournamentsTable } from "@workspace/db";
 import { eq, and, or, inArray } from "drizzle-orm";
+import { ensureMatchLineupsFromSquads } from "../lib/ensure-match-lineups";
 
 async function syncRoleToLineups(teamId: number, playerName: string, role: string) {
   await db
@@ -103,10 +104,26 @@ router.get("/squad/:playerId/stats", async (req, res) => {
   }
 
   // For each linked squad, get events by (teamId + playerName) pair
-  const allEvents = await db.select().from(matchEventsTable);
   const allMatches = await db.select().from(matchesTable);
-  const allTournaments = await db.select().from(tournamentsTable);
-  const allTeams = await db.select().from(teamsTable);
+  const linkedTeamIds = new Set(linkedSquads.map(s => s.teamId));
+  await Promise.all(
+    allMatches
+      .filter(match =>
+        match.status === "finished"
+        && (
+          (match.homeTeamId !== null && linkedTeamIds.has(match.homeTeamId))
+          || (match.awayTeamId !== null && linkedTeamIds.has(match.awayTeamId))
+        )
+      )
+      .map(match => ensureMatchLineupsFromSquads(match.id))
+  );
+
+  const [allEvents, allTournaments, allTeams, allLineups] = await Promise.all([
+    db.select().from(matchEventsTable),
+    db.select().from(tournamentsTable),
+    db.select().from(teamsTable),
+    db.select().from(lineupsTable),
+  ]);
 
   const matchMap = new Map(allMatches.map(m => [m.id, m]));
   const tournamentMap = new Map(allTournaments.map(t => [t.id, t]));
@@ -114,6 +131,13 @@ router.get("/squad/:playerId/stats", async (req, res) => {
 
   // Collect events that belong to this player (matching by teamId+playerName pair)
   const squadPairs = linkedSquads.map(s => ({ teamId: s.teamId, name: s.playerName }));
+  // A lineup entry represents an appearance even when the player had no goal,
+  // card, or other match event. Coaches are listed in lineups but are not players.
+  const playerLineups = allLineups.filter(lineup =>
+    lineup.role !== "coach"
+    && matchMap.get(lineup.matchId)?.status === "finished"
+    && squadPairs.some(p => p.teamId === lineup.teamId && p.name === lineup.playerName)
+  );
 
   const playerEvents = allEvents.filter(e =>
     squadPairs.some(p => p.teamId === e.teamId && p.name === e.playerName)
@@ -128,7 +152,10 @@ router.get("/squad/:playerId/stats", async (req, res) => {
   const yellowCards = playerEvents.filter(e => e.type === "yellow_card").length;
   const redCards = playerEvents.filter(e => e.type === "red_card").length;
   const assists = assistEvents.filter(e => e.type === "goal" || e.type === "penalty_goal").length;
-  const matchIds = new Set(playerEvents.map(e => e.matchId));
+  const matchIds = new Set([
+    ...playerEvents.map(e => e.matchId),
+    ...playerLineups.map(lineup => lineup.matchId),
+  ]);
   const appearances = matchIds.size;
 
   // Per-tournament stats — group by (tournamentId, teamId)
@@ -146,19 +173,18 @@ router.get("/squad/:playerId/stats", async (req, res) => {
     matchIds: Set<number>;
   }>();
 
-  for (const ev of playerEvents) {
-    const match = matchMap.get(ev.matchId);
+  const ensureTournamentEntry = (matchId: number, teamId: number) => {
+    const match = matchMap.get(matchId);
     const tid = match?.tournamentId ?? null;
     const tournament = tid ? tournamentMap.get(tid) : null;
-    const squadTeam = teamMap.get(ev.teamId);
-    const key: TournamentKey = `${tid ?? 0}-${ev.teamId}`;
-
+    const key: TournamentKey = `${tid ?? 0}-${teamId}`;
     if (!byTournament.has(key)) {
+      const squadTeam = teamMap.get(teamId);
       byTournament.set(key, {
         tournamentId: tid,
         tournamentName: tournament?.name ?? match?.competition ?? "Friendly",
         tournamentLogo: tournament?.logoUrl ?? null,
-        teamId: ev.teamId,
+        teamId,
         teamName: squadTeam?.name ?? "Unknown",
         goals: 0,
         assists: 0,
@@ -167,12 +193,22 @@ router.get("/squad/:playerId/stats", async (req, res) => {
         matchIds: new Set(),
       });
     }
-    const entry = byTournament.get(key)!;
+    return byTournament.get(key)!;
+  };
+
+  for (const ev of playerEvents) {
+    const entry = ensureTournamentEntry(ev.matchId, ev.teamId);
     entry.matchIds.add(ev.matchId);
     if (ev.type === "goal" || ev.type === "penalty_goal") entry.goals++;
     if (ev.type === "own_goal") entry.goals--; // don't count own goals
     if (ev.type === "yellow_card") entry.yellowCards++;
     if (ev.type === "red_card") entry.redCards++;
+  }
+
+  // Include lineup-only matches in tournament breakdowns as well.
+  for (const lineup of playerLineups) {
+    const entry = ensureTournamentEntry(lineup.matchId, lineup.teamId);
+    entry.matchIds.add(lineup.matchId);
   }
 
   // Add assists to tournament entries

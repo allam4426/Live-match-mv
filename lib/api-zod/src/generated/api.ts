@@ -598,6 +598,8 @@ export const ListTournamentsQueryParams = zod.object({
   "sport": zod.enum(['football', 'futsal', 'all']).optional()
 })
 
+export const listTournamentsResponseStageTypeDefault = `championship`;
+
 export const ListTournamentsResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -614,7 +616,9 @@ export const ListTournamentsResponseItem = zod.object({
   "toPos": zod.number(),
   "type": zod.enum(['champion', 'qualified', 'qualified_playoff', 'relegated_playoff', 'relegated']),
   "label": zod.string().describe('e.g. \'Direct to Final\', \'Semi-Final\', \'Relegated\'')
-})).nullish()
+})).nullish(),
+  "parentTournamentId": zod.number().nullish().describe('Parent championship for an atoll, zone, regional, or final stage'),
+  "stageType": zod.enum(['championship', 'atoll', 'zone', 'regional', 'final']).default(listTournamentsResponseStageTypeDefault)
 })
 export const ListTournamentsResponse = zod.array(ListTournamentsResponseItem)
 
@@ -622,6 +626,8 @@ export const ListTournamentsResponse = zod.array(ListTournamentsResponseItem)
 /**
  * @summary Create a tournament
  */
+export const createTournamentBodyStageTypeDefault = `championship`;
+
 export const CreateTournamentBody = zod.object({
   "name": zod.string(),
   "sport": zod.enum(['football', 'futsal']),
@@ -636,7 +642,9 @@ export const CreateTournamentBody = zod.object({
   "toPos": zod.number(),
   "type": zod.enum(['champion', 'qualified', 'qualified_playoff', 'relegated_playoff', 'relegated']),
   "label": zod.string().describe('e.g. \'Direct to Final\', \'Semi-Final\', \'Relegated\'')
-})).optional()
+})).optional(),
+  "parentTournamentId": zod.number().nullish(),
+  "stageType": zod.enum(['championship', 'atoll', 'zone', 'regional', 'final']).default(createTournamentBodyStageTypeDefault)
 })
 
 
@@ -646,6 +654,8 @@ export const CreateTournamentBody = zod.object({
 export const GetTournamentParams = zod.object({
   "id": zod.coerce.number()
 })
+
+export const getTournamentResponseStageTypeDefault = `championship`;
 
 export const GetTournamentResponse = zod.object({
   "id": zod.number(),
@@ -663,7 +673,9 @@ export const GetTournamentResponse = zod.object({
   "toPos": zod.number(),
   "type": zod.enum(['champion', 'qualified', 'qualified_playoff', 'relegated_playoff', 'relegated']),
   "label": zod.string().describe('e.g. \'Direct to Final\', \'Semi-Final\', \'Relegated\'')
-})).nullish()
+})).nullish(),
+  "parentTournamentId": zod.number().nullish().describe('Parent championship for an atoll, zone, regional, or final stage'),
+  "stageType": zod.enum(['championship', 'atoll', 'zone', 'regional', 'final']).default(getTournamentResponseStageTypeDefault)
 })
 
 
@@ -689,8 +701,12 @@ export const UpdateTournamentBody = zod.object({
   "toPos": zod.number(),
   "type": zod.enum(['champion', 'qualified', 'qualified_playoff', 'relegated_playoff', 'relegated']),
   "label": zod.string().describe('e.g. \'Direct to Final\', \'Semi-Final\', \'Relegated\'')
-})).optional()
+})).optional(),
+  "parentTournamentId": zod.number().nullish(),
+  "stageType": zod.enum(['championship', 'atoll', 'zone', 'regional', 'final']).optional()
 })
+
+export const updateTournamentResponseStageTypeDefault = `championship`;
 
 export const UpdateTournamentResponse = zod.object({
   "id": zod.number(),
@@ -708,7 +724,9 @@ export const UpdateTournamentResponse = zod.object({
   "toPos": zod.number(),
   "type": zod.enum(['champion', 'qualified', 'qualified_playoff', 'relegated_playoff', 'relegated']),
   "label": zod.string().describe('e.g. \'Direct to Final\', \'Semi-Final\', \'Relegated\'')
-})).nullish()
+})).nullish(),
+  "parentTournamentId": zod.number().nullish().describe('Parent championship for an atoll, zone, regional, or final stage'),
+  "stageType": zod.enum(['championship', 'atoll', 'zone', 'regional', 'final']).default(updateTournamentResponseStageTypeDefault)
 })
 
 
@@ -726,6 +744,8 @@ export const DeleteTournamentParams = zod.object({
 export const ListActiveTournamentsQueryParams = zod.object({
   "sport": zod.coerce.string().optional()
 })
+
+export const listActiveTournamentsResponseStageTypeDefault = `championship`;
 
 export const ListActiveTournamentsResponseItem = zod.object({
   "id": zod.number(),
@@ -746,7 +766,9 @@ export const ListActiveTournamentsResponseItem = zod.object({
   "toPos": zod.number(),
   "type": zod.enum(['champion', 'qualified', 'qualified_playoff', 'relegated_playoff', 'relegated']),
   "label": zod.string().describe('e.g. \'Direct to Final\', \'Semi-Final\', \'Relegated\'')
-})).nullish()
+})).nullish(),
+  "parentTournamentId": zod.number().nullish(),
+  "stageType": zod.enum(['championship', 'atoll', 'zone', 'regional', 'final']).default(listActiveTournamentsResponseStageTypeDefault)
 })
 export const ListActiveTournamentsResponse = zod.array(ListActiveTournamentsResponseItem)
 

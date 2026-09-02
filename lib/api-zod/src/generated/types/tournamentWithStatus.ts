@@ -10,6 +10,7 @@ import type { TournamentWithStatusFormat } from './tournamentWithStatusFormat';
 import type { TournamentWithStatusMatchStatus } from './tournamentWithStatusMatchStatus';
 import type { TournamentWithStatusSingleGroupFormat } from './tournamentWithStatusSingleGroupFormat';
 import type { TournamentWithStatusSport } from './tournamentWithStatusSport';
+import type { TournamentWithStatusStageType } from './tournamentWithStatusStageType';
 
 export interface TournamentWithStatus {
   id: number;
@@ -30,4 +31,7 @@ export interface TournamentWithStatus {
   /** @nullable */
   color?: string | null;
   qualificationZones?: QualificationZone[] | null;
+  /** @nullable */
+  parentTournamentId?: number | null;
+  stageType?: TournamentWithStatusStageType;
 }

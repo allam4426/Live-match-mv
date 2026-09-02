@@ -12,6 +12,7 @@ import {
 } from "@workspace/api-zod";
 import { alias } from "drizzle-orm/pg-core";
 import { subscribeToMatch, unsubscribeFromMatch } from "../lib/match-sse";
+import { ensureMatchLineupsFromSquads } from "../lib/ensure-match-lineups";
 
 const router = Router();
 
@@ -336,6 +337,7 @@ router.patch("/matches/:id", async (req, res) => {
 
   // Send push notification when match transitions to finished
   if (old?.status !== "finished" && match.status === "finished") {
+    await ensureMatchLineupsFromSquads(id);
     const homeName = row.homeTeam?.name ?? "Home";
     const awayName = row.awayTeam?.name ?? "Away";
     const homeScore = match.homeScore ?? 0;

@@ -527,7 +527,9 @@ CREATE TABLE public.tournaments (
     format text DEFAULT 'league'::text NOT NULL,
     single_group_format text,
     color text,
-    qualification_zones json
+    qualification_zones json,
+    parent_tournament_id integer,
+    stage_type text DEFAULT 'championship'
 );
 
 

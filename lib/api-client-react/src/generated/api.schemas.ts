@@ -155,6 +155,17 @@ export const TournamentSingleGroupFormat = {
   top2_final: 'top2_final',
 } as const;
 
+export type TournamentStageType = typeof TournamentStageType[keyof typeof TournamentStageType];
+
+
+export const TournamentStageType = {
+  championship: 'championship',
+  atoll: 'atoll',
+  zone: 'zone',
+  regional: 'regional',
+  final: 'final',
+} as const;
+
 export interface Tournament {
   id: number;
   name: string;
@@ -177,6 +188,12 @@ export interface Tournament {
      */
   color?: string | null;
   qualificationZones?: QualificationZone[] | null;
+  /**
+     * Parent championship for an atoll, zone, regional, or final stage
+     * @nullable
+     */
+  parentTournamentId?: number | null;
+  stageType?: TournamentStageType;
 }
 
 export type TournamentWithStatusSport = typeof TournamentWithStatusSport[keyof typeof TournamentWithStatusSport];
@@ -217,6 +234,17 @@ export const TournamentWithStatusMatchStatus = {
   finished: 'finished',
 } as const;
 
+export type TournamentWithStatusStageType = typeof TournamentWithStatusStageType[keyof typeof TournamentWithStatusStageType];
+
+
+export const TournamentWithStatusStageType = {
+  championship: 'championship',
+  atoll: 'atoll',
+  zone: 'zone',
+  regional: 'regional',
+  final: 'final',
+} as const;
+
 export interface TournamentWithStatus {
   id: number;
   name: string;
@@ -236,6 +264,9 @@ export interface TournamentWithStatus {
   /** @nullable */
   color?: string | null;
   qualificationZones?: QualificationZone[] | null;
+  /** @nullable */
+  parentTournamentId?: number | null;
+  stageType?: TournamentWithStatusStageType;
 }
 
 export type TournamentInputSport = typeof TournamentInputSport[keyof typeof TournamentInputSport];
@@ -263,6 +294,17 @@ export const TournamentInputSingleGroupFormat = {
   top2_final: 'top2_final',
 } as const;
 
+export type TournamentInputStageType = typeof TournamentInputStageType[keyof typeof TournamentInputStageType];
+
+
+export const TournamentInputStageType = {
+  championship: 'championship',
+  atoll: 'atoll',
+  zone: 'zone',
+  regional: 'regional',
+  final: 'final',
+} as const;
+
 export interface TournamentInput {
   name: string;
   sport: TournamentInputSport;
@@ -273,6 +315,8 @@ export interface TournamentInput {
   singleGroupFormat?: TournamentInputSingleGroupFormat;
   color?: string;
   qualificationZones?: QualificationZone[];
+  parentTournamentId?: number | null;
+  stageType?: TournamentInputStageType;
 }
 
 export type TournamentUpdateSport = typeof TournamentUpdateSport[keyof typeof TournamentUpdateSport];
@@ -300,6 +344,17 @@ export const TournamentUpdateSingleGroupFormat = {
   top2_final: 'top2_final',
 } as const;
 
+export type TournamentUpdateStageType = typeof TournamentUpdateStageType[keyof typeof TournamentUpdateStageType];
+
+
+export const TournamentUpdateStageType = {
+  championship: 'championship',
+  atoll: 'atoll',
+  zone: 'zone',
+  regional: 'regional',
+  final: 'final',
+} as const;
+
 export interface TournamentUpdate {
   name?: string;
   sport?: TournamentUpdateSport;
@@ -311,6 +366,8 @@ export interface TournamentUpdate {
   singleGroupFormat?: TournamentUpdateSingleGroupFormat;
   color?: string;
   qualificationZones?: QualificationZone[];
+  parentTournamentId?: number | null;
+  stageType?: TournamentUpdateStageType;
 }
 
 export type TournamentStandingsFormat = typeof TournamentStandingsFormat[keyof typeof TournamentStandingsFormat];

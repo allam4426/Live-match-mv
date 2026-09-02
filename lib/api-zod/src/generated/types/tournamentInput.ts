@@ -9,6 +9,7 @@ import type { QualificationZone } from './qualificationZone';
 import type { TournamentInputFormat } from './tournamentInputFormat';
 import type { TournamentInputSingleGroupFormat } from './tournamentInputSingleGroupFormat';
 import type { TournamentInputSport } from './tournamentInputSport';
+import type { TournamentInputStageType } from './tournamentInputStageType';
 
 export interface TournamentInput {
   name: string;
@@ -20,4 +21,6 @@ export interface TournamentInput {
   singleGroupFormat?: TournamentInputSingleGroupFormat;
   color?: string;
   qualificationZones?: QualificationZone[];
+  parentTournamentId?: number | null;
+  stageType?: TournamentInputStageType;
 }

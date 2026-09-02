@@ -1,5 +1,5 @@
 {
-  "name": "drive-file-manager",
+  "name": "live-match",
   "compatibility_date": "2026-08-10",
   "main": "src/worker.ts",
   "assets": {

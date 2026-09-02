@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Trash2, Plus, X, Pencil, Check, User, Users } from "lucide-react";
 import { TeamLogo } from "@/components/team-logo";
 import { cn } from "@/lib/utils";
+import { ExistingPlayer, PlayerDatabasePicker } from "@/components/admin/player-database-picker";
 
 type Role = "player" | "coach" | "captain";
 const ROLES: Role[] = ["player", "captain", "coach"];
@@ -36,6 +37,8 @@ export function PlayersTab() {
   const [sportFilter, setSportFilter] = useState<"all" | "football" | "futsal">("all");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [selectedExisting, setSelectedExisting] = useState<ExistingPlayer | null>(null);
+  const [formError, setFormError] = useState("");
   const [editPlayer, setEditPlayer] = useState<SquadPlayer | null>(null);
   const [editForm, setEditForm] = useState({ ...EMPTY_FORM });
 
@@ -58,6 +61,11 @@ export function PlayersTab() {
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTeamId || !form.playerName.trim()) return;
+    if (selectedExisting?.teamId === selectedTeamId) {
+      setFormError("This player is already listed in the selected team squad.");
+      return;
+    }
+    setFormError("");
     addPlayer.mutate({
       id: selectedTeamId,
       data: {
@@ -74,6 +82,8 @@ export function PlayersTab() {
     }, {
       onSuccess: () => {
         setForm({ ...EMPTY_FORM });
+        setSelectedExisting(null);
+        setFormError("");
         setShowForm(false);
         invalidateSquad();
       },
@@ -150,8 +160,14 @@ export function PlayersTab() {
         <Skeleton className="h-10 w-full rounded-xl" />
       ) : (
         <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-          {teams?.map(team => (
-            <button key={team.id} onClick={() => { setSelectedTeamId(team.id); setShowForm(false); setEditPlayer(null); }}
+           {teams?.map(team => (
+             <button key={team.id} onClick={() => {
+               setSelectedTeamId(team.id);
+               setShowForm(false);
+               setSelectedExisting(null);
+               setFormError("");
+               setEditPlayer(null);
+             }}
               className={cn(
                 "flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left transition-all",
                 selectedTeamId === team.id
@@ -180,7 +196,12 @@ export function PlayersTab() {
                 <p className="text-[10px] text-muted-foreground">{squad?.length ?? 0} players</p>
               </div>
             </div>
-            <button onClick={() => { setShowForm(!showForm); setEditPlayer(null); }}
+           <button onClick={() => {
+             setShowForm(!showForm);
+             setEditPlayer(null);
+             setSelectedExisting(null);
+             setFormError("");
+           }}
               className="flex items-center gap-1.5 bg-primary text-white rounded-xl px-3 py-2 text-xs font-bold">
               {showForm ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
               {showForm ? "Cancel" : "Add Player"}
@@ -190,11 +211,40 @@ export function PlayersTab() {
           {/* Add form */}
           {showForm && (
             <form onSubmit={handleAdd} className="bg-card border border-border rounded-xl p-4 space-y-3">
-              <p className="text-xs font-bold text-foreground">New Player / Staff</p>
+               <p className="text-xs font-bold text-foreground">Add Player / Staff</p>
+               <PlayerDatabasePicker
+                 selectedPlayer={selectedExisting}
+                 onSelect={(player) => {
+                   setSelectedExisting(player);
+                   setForm(f => ({
+                     ...f,
+                     playerName: player.playerName,
+                     playerCode: player.playerCode ?? "",
+                     photoUrl: player.photoUrl ?? "",
+                     nationality: player.nationality ?? "",
+                     position: player.position ?? "",
+                   }));
+                   setFormError("");
+                 }}
+                 onClear={() => {
+                   setSelectedExisting(null);
+                   setForm(f => ({ ...f, playerName: "", playerCode: "", photoUrl: "", nationality: "", position: "" }));
+                   setFormError("");
+                 }}
+               />
+               {selectedExisting && selectedExisting.teamId === selectedTeamId && (
+                 <p className="text-xs font-semibold text-amber-400">
+                   This player is already on {selectedTeam.name}&apos;s squad.
+                 </p>
+               )}
+               {formError && <p className="text-xs font-semibold text-red-400">{formError}</p>}
               <div className="grid grid-cols-2 gap-2">
                 <div className="col-span-2">
                   <label className="text-[10px] font-semibold text-muted-foreground uppercase block mb-1">Full Name *</label>
-                  <input value={form.playerName} onChange={e => setForm(f => ({ ...f, playerName: e.target.value }))}
+                   <input value={form.playerName} onChange={e => {
+                     setSelectedExisting(null);
+                     setForm(f => ({ ...f, playerName: e.target.value }));
+                   }}
                     placeholder="e.g. Lionel Messi" className="admin-input" required />
                 </div>
                 <div>
@@ -204,7 +254,10 @@ export function PlayersTab() {
                 </div>
                 <div>
                   <label className="text-[10px] font-semibold text-muted-foreground uppercase block mb-1">Player Code (optional)</label>
-                  <input value={form.playerCode} onChange={e => setForm(f => ({ ...f, playerCode: e.target.value }))}
+                   <input value={form.playerCode} onChange={e => {
+                     setSelectedExisting(null);
+                     setForm(f => ({ ...f, playerCode: e.target.value }));
+                   }}
                     placeholder="e.g. messi-10" className="admin-input" />
                 </div>
                 <div>

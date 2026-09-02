@@ -9,6 +9,7 @@ import type { QualificationZone } from './qualificationZone';
 import type { TournamentFormat } from './tournamentFormat';
 import type { TournamentSingleGroupFormat } from './tournamentSingleGroupFormat';
 import type { TournamentSport } from './tournamentSport';
+import type { TournamentStageType } from './tournamentStageType';
 
 export interface Tournament {
   id: number;
@@ -32,4 +33,10 @@ export interface Tournament {
      */
   color?: string | null;
   qualificationZones?: QualificationZone[] | null;
+  /**
+     * Parent championship for an atoll, zone, regional, or final stage
+     * @nullable
+     */
+  parentTournamentId?: number | null;
+  stageType?: TournamentStageType;
 }

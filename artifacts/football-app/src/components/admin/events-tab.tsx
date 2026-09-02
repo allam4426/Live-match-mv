@@ -462,6 +462,7 @@ export function EventsTab() {
   // that lets the public match page compute the exact same elapsed time with zero drift.
   const savedAnchorRef = useRef<number | null>(undefined as unknown as number | null);
   useEffect(() => {
+    if (!selectedMatchId) return;
     if (clockAnchorMs === savedAnchorRef.current) return;
     savedAnchorRef.current = clockAnchorMs;
     updateMatch.mutate({ id: selectedMatchId, data: { clockAnchorMs: clockAnchorMs ?? null } });

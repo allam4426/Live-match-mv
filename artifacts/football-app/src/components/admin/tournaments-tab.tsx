@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 type Sport = "football" | "futsal";
 type Format = "league" | "group_stage" | "knockout";
 type SingleGroupFmt = "bye_semi" | "top2_final" | "";
+type StageType = "championship" | "atoll" | "zone" | "regional" | "final";
+type StageChoice = StageType | "";
 type ZoneType = "champion" | "qualified" | "qualified_playoff" | "relegated_playoff" | "relegated";
 
 interface QualificationZone {
@@ -42,7 +44,12 @@ const EMPTY_ZONE: { fromPos: string; toPos: string; type: ZoneType; label: strin
   fromPos: "1", toPos: "1", type: "qualified", label: "",
 };
 
-const EMPTY = { name: "", sport: "football" as Sport, season: "", logoUrl: "", description: "", format: "league" as Format, singleGroupFormat: "" as SingleGroupFmt, color: "#e53935", qualificationZones: [] as QualificationZone[] };
+const EMPTY = {
+  name: "", sport: "football" as Sport, season: "", logoUrl: "", description: "",
+  format: "league" as Format, singleGroupFormat: "" as SingleGroupFmt,
+  color: "#e53935", qualificationZones: [] as QualificationZone[],
+  parentTournamentId: null as number | null, stageType: "" as StageChoice,
+};
 
 const COLOR_PRESETS = [
   "#e53935", "#d81b60", "#8e24aa", "#3949ab",
@@ -50,6 +57,13 @@ const COLOR_PRESETS = [
   "#fb8c00", "#f4511e", "#6d4c41", "#546e7a",
 ];
 const FORMAT_LABELS: Record<Format, string> = { league: "League", group_stage: "Group Stage", knockout: "Knockout" };
+const STAGE_LABELS: Record<StageType, string> = {
+  championship: "Championship",
+  atoll: "Atoll round",
+  zone: "Zone round",
+  regional: "Regional round",
+  final: "Final round",
+};
 
 /* ── Zone editor component ── */
 function ZoneEditor({ zones, onChange }: { zones: QualificationZone[]; onChange: (z: QualificationZone[]) => void }) {
@@ -144,11 +158,15 @@ export function TournamentsTab() {
   const deleteTournament = useDeleteTournament();
 
   const invalidate = () => qc.invalidateQueries({ queryKey: getListTournamentsQueryKey() });
+  const parentOptions = tournaments?.filter(t =>
+    t.id !== editingId && !t.parentTournamentId && (t.stageType ?? "championship") === "championship"
+  ) ?? [];
 
   const buildPayload = (f: typeof EMPTY) => {
-    const { singleGroupFormat: sgf, qualificationZones, ...rest } = f;
+    const { singleGroupFormat: sgf, qualificationZones, stageType, ...rest } = f;
     return {
       ...rest,
+      ...(stageType ? { stageType } : { parentTournamentId: null }),
       ...(sgf ? { singleGroupFormat: sgf as "bye_semi" | "top2_final" } : {}),
       qualificationZones: qualificationZones.length > 0 ? qualificationZones : [],
     };
@@ -167,6 +185,7 @@ export function TournamentsTab() {
     logoUrl?: string | null; description?: string | null; format: string;
     singleGroupFormat?: string | null; color?: string | null;
     qualificationZones?: QualificationZone[] | null;
+    parentTournamentId?: number | null; stageType?: StageType;
   }) => {
     setEditingId(t.id);
     setEditForm({
@@ -179,8 +198,25 @@ export function TournamentsTab() {
       singleGroupFormat: (t.singleGroupFormat ?? "") as SingleGroupFmt,
       color: t.color ?? "#e53935",
       qualificationZones: (t.qualificationZones ?? []) as QualificationZone[],
+      parentTournamentId: t.parentTournamentId ?? null,
+      stageType: t.stageType ?? "championship",
     });
     setExpandedId(null);
+  };
+
+  const handleAddStage = (parent: typeof parentOptions[number]) => {
+    setForm({
+      ...EMPTY,
+      name: `${parent.name} - Atoll Round`,
+      sport: parent.sport as Sport,
+      season: parent.season,
+      logoUrl: parent.logoUrl ?? "",
+      parentTournamentId: parent.id,
+      stageType: "atoll",
+      color: parent.color ?? EMPTY.color,
+    });
+    setShowForm(true);
+    setEditingId(null);
   };
 
   const handleEditSave = (id: number) => {
@@ -191,7 +227,8 @@ export function TournamentsTab() {
   };
 
   const handleDelete = (id: number) => {
-    if (!confirm("Delete this tournament?")) return;
+    const childCount = tournaments?.filter(t => t.parentTournamentId === id).length ?? 0;
+    if (!confirm(childCount ? `Delete this tournament? Its ${childCount} child stage(s) will become standalone tournaments.` : "Delete this tournament?")) return;
     deleteTournament.mutate({ id }, { onSuccess: invalidate });
   };
 
@@ -208,7 +245,9 @@ export function TournamentsTab() {
 
       {showForm && (
         <form onSubmit={handleCreate} className="bg-card border border-border rounded-xl p-4 space-y-3">
-          <p className="text-sm font-bold text-foreground">New Tournament</p>
+          <p className="text-sm font-bold text-foreground">
+            {form.parentTournamentId ? "New Championship Stage" : "New Tournament"}
+          </p>
           <div className="grid grid-cols-2 gap-2">
             <div className="col-span-2">
               <label className="text-[10px] font-semibold text-muted-foreground uppercase block mb-1">Name *</label>
@@ -221,6 +260,26 @@ export function TournamentsTab() {
                 <option value="football">Football</option>
                 <option value="futsal">Futsal</option>
               </select>
+            </div>
+            <div className="col-span-2">
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase block mb-1">Tournament structure</label>
+              <select value={form.stageType}
+                        onChange={e => setForm(f => ({ ...f, stageType: e.target.value as StageChoice, parentTournamentId: !e.target.value || e.target.value === "championship" ? null : f.parentTournamentId }))}
+                className="admin-input">
+                        <option value="">No stage / standalone tournament</option>
+                {(Object.keys(STAGE_LABELS) as StageType[]).map(stage => (
+                  <option key={stage} value={stage}>{STAGE_LABELS[stage]}</option>
+                ))}
+              </select>
+              {form.stageType && form.stageType !== "championship" && (
+                <select value={form.parentTournamentId ?? ""} required
+                  onChange={e => setForm(f => ({ ...f, parentTournamentId: Number(e.target.value) || null }))}
+                  className="admin-input mt-2">
+                  <option value="">Select parent championship *</option>
+                  {parentOptions.map(parent => <option key={parent.id} value={parent.id}>{parent.name} · {parent.season}</option>)}
+                </select>
+              )}
+              <p className="text-[10px] text-muted-foreground mt-1">Build one championship with separate Atoll, Zone, Regional, and Final rounds.</p>
             </div>
             <div>
               <label className="text-[10px] font-semibold text-muted-foreground uppercase block mb-1">Season *</label>
@@ -283,8 +342,17 @@ export function TournamentsTab() {
         <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16 rounded-xl" />)}</div>
       ) : tournaments && tournaments.length > 0 ? (
         <div className="space-y-2">
-          {tournaments.map(t => (
-            <div key={t.id} className="bg-card rounded-xl border border-border overflow-hidden">
+          {[...tournaments].sort((a, b) => {
+            const aRoot = a.parentTournamentId ?? a.id;
+            const bRoot = b.parentTournamentId ?? b.id;
+            if (aRoot !== bRoot) return aRoot - bRoot;
+            return (a.parentTournamentId ? 1 : 0) - (b.parentTournamentId ? 1 : 0)
+              || a.name.localeCompare(b.name);
+          }).map(t => (
+            <div key={t.id} className={cn(
+              "bg-card rounded-xl border border-border overflow-hidden",
+              t.parentTournamentId && "ml-5 border-l-2 border-l-primary/50"
+            )}>
               {editingId === t.id ? (
                 <div className="p-4 space-y-3">
                   <div className="flex items-center justify-between mb-1">
@@ -310,6 +378,25 @@ export function TournamentsTab() {
                       <label className="text-[10px] font-semibold text-muted-foreground uppercase block mb-1">Season *</label>
                       <input value={editForm.season} onChange={e => setEditForm(f => ({ ...f, season: e.target.value }))}
                         className="admin-input" />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="text-[10px] font-semibold text-muted-foreground uppercase block mb-1">Tournament structure</label>
+                      <select value={editForm.stageType}
+                        onChange={e => setEditForm(f => ({ ...f, stageType: e.target.value as StageChoice, parentTournamentId: !e.target.value || e.target.value === "championship" ? null : f.parentTournamentId }))}
+                        className="admin-input">
+                        <option value="">No stage / standalone tournament</option>
+                        {(Object.keys(STAGE_LABELS) as StageType[]).map(stage => (
+                          <option key={stage} value={stage}>{STAGE_LABELS[stage]}</option>
+                        ))}
+                      </select>
+                      {editForm.stageType && editForm.stageType !== "championship" && (
+                        <select value={editForm.parentTournamentId ?? ""} required
+                          onChange={e => setEditForm(f => ({ ...f, parentTournamentId: Number(e.target.value) || null }))}
+                          className="admin-input mt-2">
+                          <option value="">Select parent championship *</option>
+                          {parentOptions.map(parent => <option key={parent.id} value={parent.id}>{parent.name} · {parent.season}</option>)}
+                        </select>
+                      )}
                     </div>
                     <div>
                       <label className="text-[10px] font-semibold text-muted-foreground uppercase block mb-1">Format</label>
@@ -388,11 +475,24 @@ export function TournamentsTab() {
                       <p className="text-sm font-semibold text-foreground">{t.name}</p>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <span className="text-[10px] text-muted-foreground capitalize">{t.sport} · {t.season}</span>
+                        <span className={cn(
+                          "text-[9px] font-bold px-1.5 py-0.5 rounded-full border",
+                          t.parentTournamentId ? "bg-primary/10 text-primary border-primary/20" : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                        )}>
+                          {STAGE_LABELS[(t.stageType ?? "championship") as StageType]}
+                        </span>
                         <span className="inline-flex items-center gap-0.5 text-[9px] font-bold bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full border border-border">
                           <Layers className="w-2.5 h-2.5" />{FORMAT_LABELS[t.format as Format] ?? t.format}
                         </span>
                       </div>
                     </div>
+                    {!t.parentTournamentId && (
+                      <button onClick={() => handleAddStage(t)}
+                        className="flex items-center gap-1 text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 rounded-lg px-2 py-1.5"
+                        title="Add a round inside this championship">
+                        <Plus className="w-3 h-3" /> Stage
+                      </button>
+                    )}
                     <button onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
                       className={cn("text-muted-foreground hover:text-foreground p-1 transition-colors", expandedId === t.id && "text-primary")}>
                       <ChevronDown className={cn("w-4 h-4 transition-transform", expandedId === t.id && "rotate-180")} />

@@ -45,18 +45,14 @@ function StatusCol({ match }: { match: Match }) {
   );
 }
 
-const CARD_Y = "bg-[#FFE600]";
 const CARD_R = "bg-[#E91E63]";
 
-function CardIndicators({ yellow, red }: { yellow: number; red: number }) {
-  if (yellow === 0 && red === 0) return null;
+function CardIndicators({ red }: { red: number }) {
+  if (red === 0) return null;
   return (
     <span className="flex items-center gap-[2px] shrink-0 ml-0.5">
       {Array.from({ length: Math.min(red, 3) }).map((_, i) => (
         <span key={`r${i}`} className={`inline-block w-[6px] h-[9px] rounded-[2px] ${CARD_R}`} />
-      ))}
-      {Array.from({ length: Math.min(yellow, 3) }).map((_, i) => (
-        <span key={`y${i}`} className={`inline-block w-[6px] h-[9px] rounded-[2px] ${CARD_Y}`} />
       ))}
     </span>
   );
@@ -111,7 +107,7 @@ export function MatchRow({
               )}>
                 {match.homeTeam.name}
               </span>
-              <CardIndicators yellow={match.homeYellowCards} red={match.homeRedCards} />
+              <CardIndicators red={match.homeRedCards} />
               {showScore ? (
                 <>
                   <span className={cn(
@@ -146,7 +142,7 @@ export function MatchRow({
               <span className="text-[13px] font-semibold flex-1 min-w-0 truncate text-foreground/75">
                 {match.awayTeam.name}
               </span>
-              <CardIndicators yellow={match.awayYellowCards} red={match.awayRedCards} />
+              <CardIndicators red={match.awayRedCards} />
               {showScore && (
                 <>
                   <span className={cn(

@@ -4,8 +4,12 @@ import bcrypt from "bcryptjs";
 import { drizzle } from "drizzle-orm/d1";
 import { eq, or, desc, inArray, and, asc, count as sqlCount, sql } from "drizzle-orm";
 import * as schema from "@workspace/db/schema-d1";
-import { buildPushPayload } from "@block65/webcrypto-web-push";
-import { buildPushPayload } from "@block65/webcrypto-web-push";
+import {
+  buildPushPayload,
+  type PushMessage,
+  type PushSubscription as WebPushSubscription,
+  type VapidKeys,
+} from "@block65/webcrypto-web-push";
 
 type Bindings = {
   DB: D1Database;
@@ -13,9 +17,15 @@ type Bindings = {
   ADMIN_PASSWORD?: string;
   COOKIE_SECRET?: string;
   VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  VAPID_CONTACT?: string;
+  VAPID_SERVER_PUBLIC_KEY?: string;
+  VAPID_SERVER_PRIVATE_KEY?: string;
+  VAPID_SUBJECT?: string;
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
+type WorkerDb = ReturnType<typeof drizzle<typeof schema>>;
 
 /* ─── teams routes ─── */
 
@@ -152,6 +162,95 @@ app.get("/api/teams/:id/form", async (c) => {
   });
 
   return c.json({ teamId: id, form });
+});
+
+app.get("/api/teams/:id/stats", async (c) => {
+  const db = drizzle(c.env.DB, { schema });
+  const id = Number(c.req.param("id"));
+  if (isNaN(id)) return c.json({ error: "Invalid id" }, 400);
+
+  const matches = await db
+    .select()
+    .from(schema.matchesTable)
+    .where(and(
+      or(eq(schema.matchesTable.homeTeamId, id), eq(schema.matchesTable.awayTeamId, id)),
+      eq(schema.matchesTable.status, "finished"),
+    ));
+
+  const matchIds = matches.map((match) => match.id);
+  const events = matchIds.length > 0
+    ? await db
+      .select()
+      .from(schema.matchEventsTable)
+      .where(and(
+        inArray(schema.matchEventsTable.matchId, matchIds),
+        eq(schema.matchEventsTable.teamId, id),
+      ))
+    : [];
+
+  const byTournament = new Map<number, {
+    matches: typeof matches;
+    events: typeof events;
+  }>();
+  for (const match of matches) {
+    const tournamentId = match.tournamentId ?? 0;
+    const group = byTournament.get(tournamentId) ?? { matches: [], events: [] };
+    group.matches.push(match);
+    byTournament.set(tournamentId, group);
+  }
+  for (const event of events) {
+    const match = matches.find((item) => item.id === event.matchId);
+    const tournamentId = match?.tournamentId ?? 0;
+    byTournament.get(tournamentId)?.events.push(event);
+  }
+
+  const tournamentIds = [...byTournament.keys()].filter((tournamentId) => tournamentId > 0);
+  const tournaments = tournamentIds.length > 0
+    ? await db
+      .select()
+      .from(schema.tournamentsTable)
+      .where(inArray(schema.tournamentsTable.id, tournamentIds))
+    : [];
+
+  const result = [...byTournament.entries()].map(([tournamentId, group]) => {
+    const tournament = tournaments.find((item) => item.id === tournamentId);
+    let wins = 0;
+    let draws = 0;
+    let losses = 0;
+    let goalsScored = 0;
+    let goalsConceded = 0;
+
+    for (const match of group.matches) {
+      const isHome = match.homeTeamId === id;
+      const scored = isHome ? match.homeScore : match.awayScore;
+      const conceded = isHome ? match.awayScore : match.homeScore;
+      goalsScored += scored;
+      goalsConceded += conceded;
+      if (scored > conceded) wins++;
+      else if (scored < conceded) losses++;
+      else draws++;
+    }
+
+    const played = group.matches.length;
+    return {
+      tournamentId,
+      tournamentName: tournament?.name ?? (tournamentId === 0 ? "Friendly / Other" : "Unknown"),
+      tournamentLogo: tournament?.logoUrl ?? null,
+      tournamentSport: tournament?.sport ?? "football",
+      played,
+      wins,
+      draws,
+      losses,
+      goalsScored,
+      goalsConceded,
+      yellowCards: group.events.filter((event) => event.type === "yellow_card").length,
+      redCards: group.events.filter((event) => event.type === "red_card").length,
+      winRate: played > 0 ? Math.round((wins / played) * 100) : 0,
+      goalPerGame: played > 0 ? Math.round((goalsScored / played) * 10) / 10 : 0,
+    };
+  });
+
+  return c.json(result.filter((item) => item.played > 0));
 });
 
 
@@ -485,7 +584,11 @@ function buildMatch(row: any) {
   };
 }
 
-function chunkArray(arr, size) { const chunks = []; for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size)); return chunks; }
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
+  return chunks;
+}
 async function fetchCardCounts(db: any, matchIds: number[], rows: any[]) {
   const result = new Map<number, { homeRed: number; awayRed: number; homeYellow: number; awayYellow: number }>();
   if (matchIds.length === 0) return result;
@@ -548,6 +651,36 @@ async function joinMatchRows(db: any, matches: any[]) {
 }
 
 
+async function ensureMatchLineupsFromSquads(db: WorkerDb, matchId: number): Promise<number> {
+  const [match] = await db.select().from(schema.matchesTable).where(eq(schema.matchesTable.id, matchId));
+  if (!match) return 0;
+
+  const teamIds = [match.homeTeamId, match.awayTeamId].filter((id): id is number => id !== null);
+  if (teamIds.length === 0) return 0;
+
+  const existing = await db.select().from(schema.lineupsTable).where(eq(schema.lineupsTable.matchId, matchId));
+  const populatedTeamIds = new Set(existing.map((player) => player.teamId));
+  const missingTeamIds = teamIds.filter((teamId) => !populatedTeamIds.has(teamId));
+  if (missingTeamIds.length === 0) return 0;
+
+  const squads = await db.select().from(schema.squadsTable).where(inArray(schema.squadsTable.teamId, missingTeamIds));
+  const players = squads.map((player) => ({
+    matchId,
+    teamId: player.teamId,
+    playerNumber: player.playerNumber,
+    playerName: player.playerName,
+    position: player.position,
+    role: player.role,
+    isStarting: player.isStarting,
+    photoUrl: player.photoUrl,
+  }));
+
+  for (const batch of chunkArray(players, 10)) {
+    await db.insert(schema.lineupsTable).values(batch);
+  }
+  return players.length;
+}
+
 app.get("/api/matches/:id/lineup", async (c) => {
   const matchId = Number(c.req.param("id"));
   const db = drizzle(c.env.DB, { schema });
@@ -590,8 +723,13 @@ app.post("/api/matches/:id/lineup/auto", async (c) => {
     home: all.filter((p) => p.teamId === match.homeTeamId),
     away: all.filter((p) => p.teamId === match.awayTeamId),
   });
-  } catch (err) {
-    return c.json({ debugError: err.message, cause: err.cause ? String(err.cause.message || err.cause) : null }, 500);
+  } catch (err: unknown) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    const cause = "cause" in error ? error.cause : null;
+    return c.json({
+      debugError: error.message,
+      cause: cause instanceof Error ? cause.message : cause ? String(cause) : null,
+    }, 500);
   }
 });
 app.post("/api/matches/:id/lineup", async (c) => {
@@ -606,7 +744,7 @@ app.patch("/api/matches/:id/lineup/:playerId", async (c) => {
   const playerId = Number(c.req.param("playerId"));
   const db = drizzle(c.env.DB, { schema });
   const body = await c.req.json();
-  const updates = {};
+  const updates: Partial<Pick<schema.Lineup, "role" | "isStarting">> = {};
   if (body.role !== undefined) updates.role = body.role;
   if (body.isStarting !== undefined) updates.isStarting = body.isStarting;
   if (Object.keys(updates).length === 0) return c.json({ error: "Nothing to update" }, 400);
@@ -622,7 +760,7 @@ app.delete("/api/matches/:id/lineup/:playerId", async (c) => {
 });
 
 
-async function syncRoleToLineups(db, teamId, playerName, role) {
+async function syncRoleToLineups(db: WorkerDb, teamId: number, playerName: string, role: string) {
   await db.update(schema.lineupsTable).set({ role }).where(and(eq(schema.lineupsTable.teamId, teamId), eq(schema.lineupsTable.playerName, playerName)));
 }
 app.get("/api/teams/:id/squad", async (c) => {
@@ -658,7 +796,7 @@ app.patch("/api/teams/:id/squad/:playerId", async (c) => {
   const db = drizzle(c.env.DB, { schema });
   const body = await c.req.json();
   const { playerNumber, playerName, playerCode, position, role, isStarting, photoUrl, nationality, bio } = body;
-  const updates = {};
+  const updates: Partial<Omit<schema.Squad, "id" | "teamId">> = {};
   if (playerNumber !== undefined) updates.playerNumber = playerNumber;
   if (playerName !== undefined) updates.playerName = playerName;
   if (playerCode !== undefined) updates.playerCode = playerCode?.trim() || null;
@@ -679,6 +817,140 @@ app.delete("/api/teams/:id/squad/:playerId", async (c) => {
   const db = drizzle(c.env.DB, { schema });
   await db.delete(schema.squadsTable).where(and(eq(schema.squadsTable.id, playerId), eq(schema.squadsTable.teamId, teamId)));
   return c.body(null, 204);
+});
+
+app.get("/api/squad/:playerId/stats", async (c) => {
+  const db = drizzle(c.env.DB, { schema });
+  const playerId = Number(c.req.param("playerId"));
+  const [player] = await db.select().from(schema.squadsTable).where(eq(schema.squadsTable.id, playerId));
+  if (!player) return c.json({ error: "Not found" }, 404);
+
+  const [team] = await db.select().from(schema.teamsTable).where(eq(schema.teamsTable.id, player.teamId));
+  const linkedSquads = player.playerCode
+    ? await db.select().from(schema.squadsTable).where(eq(schema.squadsTable.playerCode, player.playerCode))
+    : [player];
+  const allMatches = await db.select().from(schema.matchesTable);
+  const linkedTeamIds = new Set(linkedSquads.map((squad) => squad.teamId));
+
+  for (const match of allMatches) {
+    const involved =
+      (match.homeTeamId !== null && linkedTeamIds.has(match.homeTeamId))
+      || (match.awayTeamId !== null && linkedTeamIds.has(match.awayTeamId));
+    if (match.status === "finished" && involved) {
+      await ensureMatchLineupsFromSquads(db, match.id);
+    }
+  }
+
+  const [allEvents, allTournaments, allTeams, allLineups] = await Promise.all([
+    db.select().from(schema.matchEventsTable),
+    db.select().from(schema.tournamentsTable),
+    db.select().from(schema.teamsTable),
+    db.select().from(schema.lineupsTable),
+  ]);
+  const matchMap = new Map(allMatches.map((match) => [match.id, match]));
+  const tournamentMap = new Map(allTournaments.map((tournament) => [tournament.id, tournament]));
+  const teamMap = new Map(allTeams.map((row) => [row.id, row]));
+  const squadPairs = linkedSquads.map((squad) => ({ teamId: squad.teamId, name: squad.playerName }));
+  const playerLineups = allLineups.filter((lineup) =>
+    lineup.role !== "coach"
+    && matchMap.get(lineup.matchId)?.status === "finished"
+    && squadPairs.some((pair) => pair.teamId === lineup.teamId && pair.name === lineup.playerName)
+  );
+  const playerEvents = allEvents.filter((event) =>
+    squadPairs.some((pair) => pair.teamId === event.teamId && pair.name === event.playerName)
+  );
+  const assistEvents = allEvents.filter((event) =>
+    squadPairs.some((pair) => pair.name === event.assistPlayerName)
+  );
+  const goals = playerEvents.filter((event) => event.type === "goal" || event.type === "penalty_goal").length;
+  const ownGoals = playerEvents.filter((event) => event.type === "own_goal").length;
+  const yellowCards = playerEvents.filter((event) => event.type === "yellow_card").length;
+  const redCards = playerEvents.filter((event) => event.type === "red_card").length;
+  const assists = assistEvents.filter((event) => event.type === "goal" || event.type === "penalty_goal").length;
+  const appearanceMatchIds = new Set([
+    ...playerEvents.map((event) => event.matchId),
+    ...playerLineups.map((lineup) => lineup.matchId),
+  ]);
+  const byTournament = new Map<string, {
+    tournamentId: number | null;
+    tournamentName: string;
+    tournamentLogo: string | null;
+    teamName: string;
+    goals: number;
+    assists: number;
+    yellowCards: number;
+    redCards: number;
+    matchIds: Set<number>;
+  }>();
+  const ensureTournamentEntry = (matchId: number, teamId: number) => {
+    const match = matchMap.get(matchId);
+    const tournamentId = match?.tournamentId ?? null;
+    const tournament = tournamentId ? tournamentMap.get(tournamentId) : null;
+    const key = `${tournamentId ?? 0}-${teamId}`;
+    if (!byTournament.has(key)) {
+      byTournament.set(key, {
+        tournamentId,
+        tournamentName: tournament?.name ?? match?.competition ?? "Friendly",
+        tournamentLogo: tournament?.logoUrl ?? null,
+        teamName: teamMap.get(teamId)?.name ?? "Unknown",
+        goals: 0,
+        assists: 0,
+        yellowCards: 0,
+        redCards: 0,
+        matchIds: new Set(),
+      });
+    }
+    return byTournament.get(key)!;
+  };
+
+  for (const event of playerEvents) {
+    const entry = ensureTournamentEntry(event.matchId, event.teamId);
+    entry.matchIds.add(event.matchId);
+    if (event.type === "goal" || event.type === "penalty_goal") entry.goals++;
+    if (event.type === "own_goal") entry.goals--;
+    if (event.type === "yellow_card") entry.yellowCards++;
+    if (event.type === "red_card") entry.redCards++;
+  }
+  for (const lineup of playerLineups) {
+    ensureTournamentEntry(lineup.matchId, lineup.teamId).matchIds.add(lineup.matchId);
+  }
+  for (const event of assistEvents.filter((row) => row.type === "goal" || row.type === "penalty_goal")) {
+    const match = matchMap.get(event.matchId);
+    const entry = byTournament.get(`${match?.tournamentId ?? 0}-${event.teamId}`);
+    if (entry) entry.assists++;
+  }
+
+  const tournamentStats = [...byTournament.values()].map((entry) => ({
+    tournamentId: entry.tournamentId,
+    tournamentName: entry.tournamentName,
+    tournamentLogo: entry.tournamentLogo,
+    teamName: entry.teamName,
+    goals: Math.max(0, entry.goals),
+    assists: entry.assists,
+    yellowCards: entry.yellowCards,
+    redCards: entry.redCards,
+    appearances: entry.matchIds.size,
+  }));
+  const playedTeamIds = new Set([
+    ...playerEvents.map((event) => event.teamId),
+    ...linkedSquads.map((squad) => squad.teamId),
+  ]);
+  const playedTeams = allTeams
+    .filter((row) => playedTeamIds.has(row.id))
+    .map((row) => ({ id: row.id, name: row.name, shortName: row.shortName, logoUrl: row.logoUrl, sport: row.sport }));
+
+  return c.json({
+    player,
+    team: team ? { id: team.id, name: team.name, shortName: team.shortName, logoUrl: team.logoUrl } : null,
+    goals,
+    assists,
+    yellowCards,
+    redCards,
+    ownGoals,
+    appearances: appearanceMatchIds.size,
+    playedTeams,
+    tournamentStats,
+  });
 });
 
 app.get("/api/matches/live", async (c) => {
@@ -779,30 +1051,75 @@ app.get("/api/matches/:id", async (c) => {
   return c.json({ ...buildMatch({ ...rows[0], streamCount: streams.length }), streams, events });
 });
 
-async function sendLiveMatchNotifications(env, db, row) {
-  const subs = await db.select().from(schema.pushSubscriptionsTable);
-  if (subs.length === 0) return;
-  const vapid = { subject: env.VAPID_CONTACT, publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY };
-  const homeName = row.homeTeam ? row.homeTeam.name : "TBD";
-  const awayName = row.awayTeam ? row.awayTeam.name : "TBD";
-  const message = {
-    data: JSON.stringify({ title: "Match Live!", body: homeName + " vs " + awayName + " has started" }),
-    options: { ttl: 3000, urgency: "high" },
+function getVapidKeys(env: Bindings): VapidKeys | null {
+  const publicKey = env.VAPID_PUBLIC_KEY ?? env.VAPID_SERVER_PUBLIC_KEY;
+  const privateKey = env.VAPID_PRIVATE_KEY ?? env.VAPID_SERVER_PRIVATE_KEY;
+  if (!publicKey || !privateKey) return null;
+  return {
+    subject: env.VAPID_CONTACT ?? env.VAPID_SUBJECT ?? "mailto:admin@livematchmv.online",
+    publicKey,
+    privateKey,
   };
-  for (const sub of subs) {
-    const subscription = { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } };
+}
+
+async function sendPushToAll(
+  env: Bindings,
+  db: WorkerDb,
+  notification: { title: string; body: string; url?: string },
+): Promise<void> {
+  const vapid = getVapidKeys(env);
+  if (!vapid) {
+    console.warn("Push skipped: VAPID public/private key bindings are unavailable");
+    return;
+  }
+
+  const subscriptions = await db.select().from(schema.pushSubscriptionsTable);
+  if (subscriptions.length === 0) return;
+
+  const message: PushMessage = {
+    data: JSON.stringify({ ...notification, icon: "/logo.png" }),
+    options: { ttl: 300, urgency: "high" },
+  };
+
+  await Promise.allSettled(subscriptions.map(async (sub) => {
+    const subscription: WebPushSubscription = {
+      endpoint: sub.endpoint,
+      expirationTime: null,
+      keys: { p256dh: sub.p256dh, auth: sub.auth },
+    };
+
     try {
       const payload = await buildPushPayload(message, subscription, vapid);
-      const res = await fetch(sub.endpoint, payload);
-      const resText = await res.text();
-      console.error("PUSH_DEBUG status=" + res.status + " body=" + resText);
-      if (res.status === 404 || res.status === 410) {
-        await db.delete(schema.pushSubscriptionsTable).where(eq(schema.pushSubscriptionsTable.id, sub.id));
+      const body = payload.body.buffer.slice(
+        payload.body.byteOffset,
+        payload.body.byteOffset + payload.body.byteLength,
+      ) as ArrayBuffer;
+      const response = await fetch(sub.endpoint, { ...payload, body });
+      if (response.status === 404 || response.status === 410) {
+        await db
+          .delete(schema.pushSubscriptionsTable)
+          .where(eq(schema.pushSubscriptionsTable.id, sub.id));
+      } else if (!response.ok) {
+        console.warn(`Push send failed (${response.status}) for ${new URL(sub.endpoint).origin}`);
       }
-    } catch (e) {
-      console.error("PUSH_DEBUG_ERROR " + (e && e.message ? e.message : String(e)));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`Push send failed for ${new URL(sub.endpoint).origin}: ${message}`);
     }
-  }
+  }));
+}
+
+async function sendLiveMatchNotifications(
+  env: Bindings,
+  db: WorkerDb,
+  row: { homeTeam: schema.Team | null; awayTeam: schema.Team | null },
+): Promise<void> {
+  const homeName = row.homeTeam?.name ?? "TBD";
+  const awayName = row.awayTeam?.name ?? "TBD";
+  await sendPushToAll(env, db, {
+    title: "Match Live!",
+    body: `${homeName} vs ${awayName} has started`,
+  });
 }
 app.patch("/api/matches/:id", async (c) => {
   const db = drizzle(c.env.DB, { schema });
@@ -820,6 +1137,9 @@ app.patch("/api/matches/:id", async (c) => {
   const streamRows = await db.select().from(schema.streamsTable).where(eq(schema.streamsTable.matchId, id));
   if (match.status === "live" && oldMatch && oldMatch.status !== "live") {
     c.executionCtx.waitUntil(sendLiveMatchNotifications(c.env, db, rows[0]));
+  }
+  if (match.status === "finished" && oldMatch && oldMatch.status !== "finished") {
+    await ensureMatchLineupsFromSquads(db, id);
   }
   return c.json(buildMatch({ ...rows[0], streamCount: streamRows.length }));
 });
@@ -1142,16 +1462,40 @@ app.post("/api/admin/seed", requireAdmin, async (c) => {
   return c.json({ success: true, message: "Demo data seeded successfully." });
 });
 
-/* ─── push (subscribe/unsubscribe only — sending still requires Node web-push, stays on Render for now) ─── */
+/* ─── push subscriptions and Cloudflare-compatible Web Push sending ─── */
 app.get("/api/push/vapid-public-key", (c) => {
-  if (!c.env.VAPID_PUBLIC_KEY) return c.json({ error: "Push notifications not configured" }, 503);
-  return c.json({ publicKey: c.env.VAPID_PUBLIC_KEY });
+  const publicKey = c.env.VAPID_PUBLIC_KEY ?? c.env.VAPID_SERVER_PUBLIC_KEY;
+  if (!publicKey) return c.json({ error: "Push notifications not configured" }, 503);
+  return c.json({ publicKey });
 });
+
+function isAllowedPushEndpoint(endpoint: string): boolean {
+  try {
+    const url = new URL(endpoint);
+    if (url.protocol !== "https:") return false;
+    const host = url.hostname.toLowerCase();
+    return host === "fcm.googleapis.com"
+      || host.endsWith(".push.services.mozilla.com")
+      || host === "web.push.apple.com"
+      || host.endsWith(".notify.windows.com");
+  } catch {
+    return false;
+  }
+}
+
+type PushSubscriptionBody = {
+  endpoint?: string;
+  keys?: { p256dh?: string; auth?: string };
+};
+
 app.post("/api/push/subscribe", async (c) => {
   const db = drizzle(c.env.DB, { schema });
-  const body = await c.req.json().catch(() => ({}));
+  const body = await c.req
+    .json<PushSubscriptionBody>()
+    .catch((): PushSubscriptionBody => ({}));
   const { endpoint, keys } = body ?? {};
   if (!endpoint || !keys?.p256dh || !keys?.auth) return c.json({ error: "Invalid subscription object" }, 400);
+  if (!isAllowedPushEndpoint(endpoint)) return c.json({ error: "Unsupported push service" }, 400);
   try {
     await db.insert(schema.pushSubscriptionsTable).values({ endpoint, p256dh: keys.p256dh, auth: keys.auth });
   } catch { /* already subscribed, ignore */ }
@@ -1165,8 +1509,73 @@ app.delete("/api/push/unsubscribe", async (c) => {
   return c.json({ success: true });
 });
 
-/* ─── match events (CRUD + auto score update; push notifications + SSE broadcast NOT yet ported — TODO) ─── */
+/* ─── match events (CRUD + score updates + Web Push notifications) ─── */
 const SCORE_GOAL_TYPES = new Set(["goal", "penalty_goal", "ten_meter_goal"]);
+type EventPushInput = {
+  playerName: string;
+  playerNumber?: string | null;
+  teamName: string;
+  minute: string;
+};
+type EventPushBuilder = (input: EventPushInput) => { title: string; body: string };
+const EVENT_PUSH: Partial<Record<string, EventPushBuilder>> = {
+  goal: ({ playerName, playerNumber, teamName, minute }) => ({
+    title: "⚽ GOAL!",
+    body: `${playerNumber ? `#${playerNumber} ` : ""}${playerName} (${teamName}) · ${minute}'`,
+  }),
+  own_goal: ({ playerName, playerNumber, teamName, minute }) => ({
+    title: "⚽ Own Goal!",
+    body: `${playerNumber ? `#${playerNumber} ` : ""}${playerName} (${teamName}) · ${minute}'`,
+  }),
+  penalty_goal: ({ playerName, playerNumber, teamName, minute }) => ({
+    title: "⚽ Penalty GOAL!",
+    body: `${playerNumber ? `#${playerNumber} ` : ""}${playerName} (${teamName}) · ${minute}'`,
+  }),
+  ten_meter_goal: ({ playerName, playerNumber, teamName, minute }) => ({
+    title: "⚽ 10-Meter GOAL!",
+    body: `${playerNumber ? `#${playerNumber} ` : ""}${playerName} (${teamName}) · ${minute}'`,
+  }),
+  penalty_awarded: ({ teamName, minute }) => ({
+    title: "🟡 Penalty Awarded!",
+    body: `${teamName} awarded a penalty · ${minute}'`,
+  }),
+  penalty_missed: ({ playerName, playerNumber, teamName, minute }) => ({
+    title: "❌ Penalty Missed",
+    body: `${playerNumber ? `#${playerNumber} ` : ""}${playerName} (${teamName}) · ${minute}'`,
+  }),
+  ten_meter_missed: ({ playerName, playerNumber, teamName, minute }) => ({
+    title: "❌ 10m Penalty Missed",
+    body: `${playerNumber ? `#${playerNumber} ` : ""}${playerName} (${teamName}) · ${minute}'`,
+  }),
+  var_review: ({ teamName, minute }) => ({
+    title: "📺 VAR Review",
+    body: `VAR checking ${teamName} decision · ${minute}'`,
+  }),
+  var_award_goal: ({ teamName, minute }) => ({
+    title: "📺✅ VAR: Goal Awarded!",
+    body: `${teamName} goal confirmed · ${minute}'`,
+  }),
+  var_no_goal: ({ teamName, minute }) => ({
+    title: "📺❌ VAR: No Goal",
+    body: `${teamName} goal disallowed · ${minute}'`,
+  }),
+  var_award_foul: ({ teamName, minute }) => ({
+    title: "📺🚫 VAR: Foul Awarded",
+    body: `Foul awarded to ${teamName} · ${minute}'`,
+  }),
+  var_award_penalty: ({ teamName, minute }) => ({
+    title: "📺 VAR: Penalty Awarded!",
+    body: `Penalty awarded to ${teamName} · ${minute}'`,
+  }),
+  red_card: ({ playerName, playerNumber, teamName, minute }) => ({
+    title: "🟥 Red Card!",
+    body: `${playerNumber ? `#${playerNumber} ` : ""}${playerName} (${teamName}) · ${minute}'`,
+  }),
+  second_yellow_red: ({ playerName, playerNumber, teamName, minute }) => ({
+    title: "🟥 Second Yellow — Off!",
+    body: `${playerNumber ? `#${playerNumber} ` : ""}${playerName} (${teamName}) · ${minute}'`,
+  }),
+};
 
 app.get("/api/matches/:id/events", async (c) => {
   const db = drizzle(c.env.DB, { schema });
@@ -1175,17 +1584,17 @@ app.get("/api/matches/:id/events", async (c) => {
   return c.json(events);
 });
 
-app.post("/api/matches/:id/events", async (c) => {
+app.post("/api/matches/:id/events", requireAdmin, async (c) => {
   const db = drizzle(c.env.DB, { schema });
   const matchId = Number(c.req.param("id"));
-  const body = await c.req.json();
+  const body = await c.req.json<Omit<schema.InsertMatchEvent, "matchId">>();
 
   const [event] = await db.insert(schema.matchEventsTable).values({ matchId, ...body }).returning();
 
   const isGoal = SCORE_GOAL_TYPES.has(body.type);
   const isOwnGoal = body.type === "own_goal";
+  const [matchRow] = await db.select().from(schema.matchesTable).where(eq(schema.matchesTable.id, matchId));
   if (isGoal || isOwnGoal) {
-    const [matchRow] = await db.select().from(schema.matchesTable).where(eq(schema.matchesTable.id, matchId));
     if (matchRow) {
       let homeScoreDelta = 0, awayScoreDelta = 0;
       if (isOwnGoal) {
@@ -1197,15 +1606,42 @@ app.post("/api/matches/:id/events", async (c) => {
         homeScore: matchRow.homeScore + homeScoreDelta,
         awayScore: matchRow.awayScore + awayScoreDelta,
       }).where(eq(schema.matchesTable.id, matchId));
-      // TODO: broadcastMatchUpdate (SSE) and sendPushToAll not yet ported to Workers — clients relying on
-      // live push notifications for goals won't get them until this is addressed in a follow-up.
+    }
+  }
+
+  if (matchRow) {
+    const [homeTeam, awayTeam] = await Promise.all([
+      matchRow.homeTeamId
+        ? db.select().from(schema.teamsTable).where(eq(schema.teamsTable.id, matchRow.homeTeamId)).then((rows) => rows[0])
+        : Promise.resolve(undefined),
+      matchRow.awayTeamId
+        ? db.select().from(schema.teamsTable).where(eq(schema.teamsTable.id, matchRow.awayTeamId)).then((rows) => rows[0])
+        : Promise.resolve(undefined),
+    ]);
+    const builder = EVENT_PUSH[body.type];
+    if (builder) {
+      const teamName = body.teamId === homeTeam?.id
+        ? homeTeam.name
+        : awayTeam?.name ?? "Away";
+      const matchLabel = `${homeTeam?.name ?? "Home"} vs ${awayTeam?.name ?? "Away"}`;
+      const notification = builder({
+        playerName: body.playerName,
+        playerNumber: body.playerNumber,
+        teamName,
+        minute: body.minute,
+      });
+      c.executionCtx.waitUntil(sendPushToAll(c.env, db, {
+        title: notification.title,
+        body: `${notification.body} — ${matchLabel}`,
+        url: `/match/${matchId}`,
+      }));
     }
   }
 
   return c.json(event, 201);
 });
 
-app.patch("/api/matches/:id/events/:eventId", async (c) => {
+app.patch("/api/matches/:id/events/:eventId", requireAdmin, async (c) => {
   const db = drizzle(c.env.DB, { schema });
   const matchId = Number(c.req.param("id"));
   const eventId = Number(c.req.param("eventId"));
@@ -1215,12 +1651,26 @@ app.patch("/api/matches/:id/events/:eventId", async (c) => {
   return c.json(event);
 });
 
-app.delete("/api/matches/:id/events/:eventId", async (c) => {
+app.delete("/api/matches/:id/events/:eventId", requireAdmin, async (c) => {
   const db = drizzle(c.env.DB, { schema });
   const matchId = Number(c.req.param("id"));
   const eventId = Number(c.req.param("eventId"));
   await db.delete(schema.matchEventsTable).where(and(eq(schema.matchEventsTable.id, eventId), eq(schema.matchEventsTable.matchId, matchId)));
   return c.body(null, 204);
+});
+
+/*
+ * SSE requires a stateful coordinator (preferably a Durable Object) to fan out
+ * updates safely across Worker isolates. Until that migration is implemented,
+ * keep this endpoint explicitly proxied to the original Render SSE service.
+ */
+app.get("/api/matches/:id/stream", async (c) => {
+  const url = new URL(c.req.url);
+  const target = `https://drive-file-manager-9k9q.onrender.com${url.pathname}${url.search}`;
+  return fetch(target, {
+    method: "GET",
+    headers: c.req.raw.headers,
+  });
 });
 
 /* ─── fallback: proxy everything else to Render until fully ported ─── */
