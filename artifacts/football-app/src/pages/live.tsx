@@ -8,9 +8,10 @@ import { BannerSlot } from "@/components/banner-slot";
 export default function LiveMatches() {
   const { data: matches, isLoading, refetch } = useListLiveMatches();
 
-  // Poll every 30 s so the live minute counter stays current
+  // Keep the live page current without repeatedly reading the endpoint every
+  // few seconds when a user leaves it open.
   useEffect(() => {
-    const id = setInterval(() => refetch(), 20000);
+    const id = setInterval(() => refetch(), 60000);
     return () => clearInterval(id);
   }, [refetch]);
 

@@ -24,8 +24,13 @@ const NotificationsPage = lazy(() => import("./pages/notifications"));
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 10_000,
-      gcTime: 5 * 60_000,
+      // Keep mostly-static football data in the browser instead of
+      // refetching every time a user changes tabs or revisits a page.
+      staleTime: 5 * 60_000,
+      gcTime: 30 * 60_000,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      retry: 1,
     },
   },
 });

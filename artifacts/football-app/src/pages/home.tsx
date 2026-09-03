@@ -169,10 +169,15 @@ export default function Home() {
   const { data: allMatches, isLoading: matchesLoading, refetch: refetchMatches } = useListMatches({ limit: 100 });
   const { data: customSpotlights } = useListSpotlights();
 
-  // Poll every 30 s so live scores and minutes stay current
+  // Low-read polling: live cards refresh regularly, while the full fixture
+  // list is allowed to stay cached much longer.
   useEffect(() => {
-    const id = setInterval(() => { refetchLive(); refetchMatches(); }, 60000);
-    return () => clearInterval(id);
+    const liveId = setInterval(() => refetchLive(), 120000);
+    const matchesId = setInterval(() => refetchMatches(), 300000);
+    return () => {
+      clearInterval(liveId);
+      clearInterval(matchesId);
+    };
   }, [refetchLive, refetchMatches]);
   const { data: competitions } = useListCompetitions();
   const { data: activeTournaments, isLoading: tournamentsLoading } = useListActiveTournaments();

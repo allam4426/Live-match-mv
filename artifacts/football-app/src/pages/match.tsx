@@ -1875,9 +1875,9 @@ export default function MatchDetails() {
     query: {
       enabled: !!matchId,
       queryKey: getGetMatchQueryKey(matchId),
-      refetchInterval: (q) => (q.state.data?.status === "live" ? 15000 : false),
-      refetchOnMount: "always",
-      staleTime: 0,
+      refetchInterval: (q) => (q.state.data?.status === "live" ? 30000 : false),
+      refetchOnMount: true,
+      staleTime: (q) => (q.state.data?.status === "live" ? 30000 : 5 * 60_000),
     },
   });
 
@@ -1887,7 +1887,7 @@ export default function MatchDetails() {
   // Real-time score updates via SSE (also acts as a keep-alive for live matches)
   const queryClient = useQueryClient();
   useEffect(() => {
-    if (!matchId) return;
+    if (!matchId || match?.status !== "live") return;
     const es = new EventSource(`/api/matches/${matchId}/stream`);
     es.onmessage = (e) => {
       try {
@@ -1899,7 +1899,7 @@ export default function MatchDetails() {
       } catch { /* ignore malformed events */ }
     };
     return () => es.close();
-  }, [matchId, queryClient]);
+  }, [matchId, match?.status, queryClient]);
 
   if (isLoading) {
     return (
