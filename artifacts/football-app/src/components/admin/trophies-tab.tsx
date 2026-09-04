@@ -15,7 +15,7 @@ export function TrophiesTab() {
   const [form, setForm] = useState({ ...EMPTY });
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState({ title: "", season: "", imageUrl: "" });
+  const [editForm, setEditForm] = useState({ teamId: 0, title: "", season: "", imageUrl: "" });
 
   const { data: trophies, isLoading } = useListTrophies();
   const { data: teams } = useListTeams();
@@ -35,9 +35,9 @@ export function TrophiesTab() {
     });
   };
 
-  const handleEditStart = (t: { id: number; title: string; season?: string | null; imageUrl?: string | null }) => {
+  const handleEditStart = (t: { id: number; teamId: number; title: string; season?: string | null; imageUrl?: string | null }) => {
     setEditingId(t.id);
-    setEditForm({ title: t.title, season: t.season ?? "", imageUrl: t.imageUrl ?? "" });
+    setEditForm({ teamId: t.teamId, title: t.title, season: t.season ?? "", imageUrl: t.imageUrl ?? "" });
   };
 
   const handleEditSave = (id: number) => {

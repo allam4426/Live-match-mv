@@ -5,6 +5,8 @@ export const pushSubscriptionsTable = pgTable("push_subscriptions", {
   endpoint: text("endpoint").notNull().unique(),
   p256dh: text("p256dh").notNull(),
   auth: text("auth").notNull(),
+  teamIds: text("team_ids").notNull().default("[]"),
+  tournamentIds: text("tournament_ids").notNull().default("[]"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

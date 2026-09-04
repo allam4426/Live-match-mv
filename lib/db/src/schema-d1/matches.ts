@@ -21,6 +21,8 @@ export const matchesTable = sqliteTable("matches", {
   venue: text("venue"),
   matchGroup: text("match_group"),
   clockAnchorMs: integer("clock_anchor_ms", { mode: "number" }),
+  liveNotificationSent: integer("live_notification_sent", { mode: "boolean" }).notNull().default(false),
+  finishedNotificationSent: integer("finished_notification_sent", { mode: "boolean" }).notNull().default(false),
 });
 
 export const insertMatchSchema = createInsertSchema(matchesTable).omit({ id: true });

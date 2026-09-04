@@ -134,7 +134,7 @@ function OverviewTab() {
     setSeedMsg("");
     try {
       const res = await fetch("/api/admin/seed", { method: "POST", credentials: "include" });
-      const data = await res.json();
+      const data = await res.json() as { message?: string; error?: string };
       setSeedMsg(res.ok ? "✅ " + data.message : "❌ " + (data.error ?? "Failed"));
       if (res.ok) window.location.reload();
     } catch {

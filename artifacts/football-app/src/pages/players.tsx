@@ -6,24 +6,27 @@ import { cn } from "@/lib/utils";
 import { useState } from "react";
 
 function PlayerAvatar({ photoUrl, name, size = "md" }: { photoUrl?: string | null; name: string; size?: "sm" | "md" | "lg" }) {
+  const [failedPhotoUrl, setFailedPhotoUrl] = useState<string | null>(null);
+  const [loadedPhotoUrl, setLoadedPhotoUrl] = useState<string | null>(null);
   const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const colors = ["bg-blue-600","bg-emerald-600","bg-purple-600","bg-orange-600","bg-teal-600","bg-red-600","bg-indigo-600","bg-pink-600"];
   const color = colors[name.charCodeAt(0) % colors.length];
   const sz = size === "sm" ? "w-10 h-10 text-sm" : size === "lg" ? "w-16 h-16 text-xl" : "w-12 h-12 text-base";
+  const canLoadPhoto = Boolean(photoUrl && photoUrl !== failedPhotoUrl);
+  const showPhoto = canLoadPhoto && loadedPhotoUrl === photoUrl;
 
-  if (photoUrl) {
-    return (
-      <img
-        src={photoUrl}
-        alt={name}
-        className={cn(sz, "rounded-full object-cover border-2 border-white/10 shrink-0")}
-        onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
-      />
-    );
-  }
   return (
-    <div className={cn(sz, "rounded-full flex items-center justify-center font-black text-white shrink-0", color)}>
-      {initials}
+    <div className={cn(sz, "relative rounded-full flex items-center justify-center font-black text-white shrink-0 overflow-hidden border-2 border-white/10", color)}>
+      {!showPhoto && initials}
+      {canLoadPhoto && (
+        <img
+          src={photoUrl ?? undefined}
+          alt={name}
+          className={cn("absolute inset-0 w-full h-full rounded-full object-cover transition-opacity", showPhoto ? "opacity-100" : "opacity-0")}
+          onLoad={() => setLoadedPhotoUrl(photoUrl ?? null)}
+          onError={() => setFailedPhotoUrl(photoUrl ?? null)}
+        />
+      )}
     </div>
   );
 }

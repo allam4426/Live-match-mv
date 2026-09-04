@@ -1,17 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link } from "wouter";
 import { ChevronLeft, Bell, BellOff, Search, X, Check } from "lucide-react";
-import { useListTournaments } from "@workspace/api-client-react";
-import { usePushNotifications } from "@/hooks/use-push-notifications";
+import { useListTeams, useListTournaments } from "@workspace/api-client-react";
+import { usePushNotifications, type PushPreferences } from "@/hooks/use-push-notifications";
 import { TeamLogo } from "@/components/team-logo";
 import { cn } from "@/lib/utils";
 
 const PREF_KEY = "livemv_notif_prefs";
 
-interface Prefs {
-  tournaments: number[];
-  teams: number[];
-}
+type Prefs = PushPreferences;
 
 function loadPrefs(): Prefs {
   try {
@@ -23,6 +20,39 @@ function loadPrefs(): Prefs {
 
 function savePrefs(p: Prefs) {
   try { localStorage.setItem(PREF_KEY, JSON.stringify(p)); } catch { /* ignore */ }
+}
+
+function TeamChip({
+  team, selected, onToggle,
+}: {
+  team: { id: number; name: string; shortName?: string | null; logoUrl?: string | null };
+  selected: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={cn(
+        "flex items-center gap-2 px-3 py-2 rounded-xl border-2 transition-all min-w-max",
+        selected ? "border-primary bg-primary/10" : "border-transparent bg-muted/30 hover:bg-muted/50",
+      )}
+    >
+      <div className="relative w-7 h-7 rounded-lg overflow-hidden bg-muted/40 flex items-center justify-center">
+        {team.logoUrl ? (
+          <img src={team.logoUrl} alt="" className="w-6 h-6 object-contain" />
+        ) : (
+          <span className="text-[10px] font-black">{(team.shortName || team.name).slice(0, 2).toUpperCase()}</span>
+        )}
+        {selected && (
+          <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+            <Check className="w-3.5 h-3.5 text-primary" />
+          </div>
+        )}
+      </div>
+      <span className="text-[11px] font-semibold text-foreground">{team.shortName || team.name}</span>
+    </button>
+  );
 }
 
 /* ── Toggle switch ── */
@@ -85,18 +115,22 @@ function TournamentChip({
 }
 
 export default function NotificationsPage() {
-  const { permission, subscribed, loading, subscribe, unsubscribe } = usePushNotifications();
+  const { permission, subscribed, loading, subscribe, updatePreferences, unsubscribe } = usePushNotifications();
+  const { data: teams = [] } = useListTeams();
   const { data: tournaments = [] } = useListTournaments();
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
   const [teamSearch, setTeamSearch] = useState("");
 
   // Persist on change
   useEffect(() => { savePrefs(prefs); }, [prefs]);
+  useEffect(() => {
+    if (subscribed) void updatePreferences(prefs).catch(() => undefined);
+  }, [prefs, subscribed, updatePreferences]);
 
   const toggleEnabled = useCallback(async (want: boolean) => {
-    if (want) await subscribe();
+    if (want) await subscribe(prefs);
     else await unsubscribe();
-  }, [subscribe, unsubscribe]);
+  }, [prefs, subscribe, unsubscribe]);
 
   const toggleTournament = (id: number) => {
     setPrefs(p => ({
@@ -107,12 +141,21 @@ export default function NotificationsPage() {
     }));
   };
 
-  // Collect unique teams from selected (or all) tournaments
-  const selectedTournaments = prefs.tournaments.length > 0
-    ? tournaments.filter(t => prefs.tournaments.includes(t.id))
-    : tournaments;
+  const toggleTeam = (id: number) => {
+    setPrefs(p => ({
+      ...p,
+      teams: p.teams.includes(id)
+        ? p.teams.filter(t => t !== id)
+        : [...p.teams, id],
+    }));
+  };
+
+  const visibleTeams = teams
+    .filter(t => !teamSearch.trim() || `${t.name} ${t.shortName ?? ""}`.toLowerCase().includes(teamSearch.trim().toLowerCase()))
+    .filter(t => prefs.tournaments.length === 0 || tournaments.some(tournament => prefs.tournaments.includes(tournament.id) && tournament.sport === t.sport));
 
   const isEnabled = subscribed;
+  const selectedCount = prefs.teams.length + prefs.tournaments.length;
 
   return (
     <div className="min-h-screen pb-24">
@@ -150,17 +193,22 @@ export default function NotificationsPage() {
           />
         </div>
 
-        {/* When disabled, show a hint */}
+        {/* Selection requirement */}
+        {isEnabled && selectedCount === 0 && (
+          <p className="text-[12px] text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 text-center">
+            Choose at least one team or tournament below. You will not receive alerts for anything else.
+          </p>
+        )}
         {!isEnabled && permission !== "denied" && (
           <p className="text-[12px] text-muted-foreground text-center px-4">
-            Enable notifications to get alerts when your favourite matches go live, goals are scored, and more.
+            Enable notifications, then choose the teams or tournaments you want to follow.
           </p>
         )}
 
         {/* Tournament section */}
         <div className={cn("bg-card rounded-2xl border border-border overflow-hidden transition-opacity", !isEnabled && "opacity-40 pointer-events-none")}>
           <div className="px-4 pt-4 pb-2">
-            <p className="text-sm font-bold text-foreground">Tournament</p>
+            <p className="text-sm font-bold text-foreground">Tournaments</p>
             <p className="text-[11px] text-muted-foreground mt-0.5">Choose which tournaments to follow</p>
           </div>
           {tournaments.length === 0 ? (
@@ -194,7 +242,7 @@ export default function NotificationsPage() {
         <div className={cn("bg-card rounded-2xl border border-border overflow-hidden transition-opacity", !isEnabled && "opacity-40 pointer-events-none")}>
           <div className="px-4 pt-4 pb-3">
             <p className="text-sm font-bold text-foreground">Teams</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Get notified for your favourite teams</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Get notified for selected teams only</p>
             <div className="mt-3 relative">
               <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
@@ -210,21 +258,40 @@ export default function NotificationsPage() {
               )}
             </div>
           </div>
-          {prefs.tournaments.length === 0 && !teamSearch && (
-            <p className="px-4 pb-4 text-xs text-muted-foreground">Select a tournament above to see teams, or search by name.</p>
+          {visibleTeams.length === 0 ? (
+            <p className="px-4 pb-4 text-xs text-muted-foreground">No matching teams</p>
+          ) : (
+            <div className="px-3 pb-4 flex gap-2 overflow-x-auto">
+              {visibleTeams.map(team => (
+                <TeamChip
+                  key={team.id}
+                  team={team}
+                  selected={prefs.teams.includes(team.id)}
+                  onToggle={() => toggleTeam(team.id)}
+                />
+              ))}
+            </div>
+          )}
+          {prefs.teams.length > 0 && (
+            <div className="px-4 pb-3 flex items-center gap-2 border-t border-border/40 pt-2">
+              <span className="text-[11px] text-muted-foreground">{prefs.teams.length} selected</span>
+              <button onClick={() => setPrefs(p => ({ ...p, teams: [] }))}
+                className="text-[11px] text-primary font-semibold">
+                Clear all
+              </button>
+            </div>
           )}
         </div>
 
         {/* Notification types */}
         <div className={cn("bg-card rounded-2xl border border-border overflow-hidden transition-opacity", !isEnabled && "opacity-40 pointer-events-none")}>
           <div className="px-4 pt-4 pb-1">
-            <p className="text-sm font-bold text-foreground">Alert types</p>
+            <p className="text-sm font-bold text-foreground">What you will receive</p>
           </div>
           {[
-            { icon: "🔴", label: "Match starts", desc: "When a selected match goes live" },
-            { icon: "⚽", label: "Goals", desc: "Goal scored in a selected match" },
-            { icon: "🥅", label: "Penalty shootout", desc: "When a penalty shootout begins" },
-            { icon: "🏁", label: "Full time", desc: "When a match ends" },
+            { icon: "🔴", label: "Match starts", desc: "For selected teams and tournaments" },
+            { icon: "⚽", label: "Goals", desc: "For selected teams and tournaments" },
+            { icon: "🏁", label: "Full time", desc: "For selected teams and tournaments" },
           ].map((item, i) => (
             <div key={i} className="flex items-center gap-3 px-4 py-3 border-t border-border/40">
               <span className="text-xl w-7 text-center">{item.icon}</span>
@@ -232,7 +299,6 @@ export default function NotificationsPage() {
                 <p className="text-sm font-semibold text-foreground">{item.label}</p>
                 <p className="text-[11px] text-muted-foreground">{item.desc}</p>
               </div>
-              <Toggle checked={isEnabled} onChange={toggleEnabled} />
             </div>
           ))}
           <div className="pb-2" />

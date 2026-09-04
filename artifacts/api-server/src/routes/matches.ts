@@ -301,9 +301,6 @@ router.patch("/matches/:id", async (req, res) => {
   const parsed = UpdateMatchBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  // Fetch old status before update to detect live transition
-  const [old] = await db.select({ status: matchesTable.status }).from(matchesTable).where(eq(matchesTable.id, id));
-
   const { kickoffAt: kickoffAtStr, ...rest } = parsed.data;
   const updateData: Record<string, unknown> = { ...rest };
   if (kickoffAtStr) updateData.kickoffAt = new Date(kickoffAtStr);
@@ -323,7 +320,15 @@ router.patch("/matches/:id", async (req, res) => {
   const result = buildMatch({ ...row, streamCount: Number(sc.cnt) });
 
   // Send push notification when match transitions to live
-  if (old?.status !== "live" && match.status === "live") {
+  const [liveClaim] = await db.update(matchesTable)
+    .set({ liveNotificationSent: true })
+    .where(and(
+      eq(matchesTable.id, id),
+      eq(matchesTable.status, "live"),
+      eq(matchesTable.liveNotificationSent, false),
+    ))
+    .returning({ id: matchesTable.id });
+  if (liveClaim) {
     const homeName = row.homeTeam?.name ?? "Home";
     const awayName = row.awayTeam?.name ?? "Away";
     setImmediate(() =>
@@ -331,12 +336,23 @@ router.patch("/matches/:id", async (req, res) => {
         title: "🔴 Match is LIVE!",
         body: `${homeName} vs ${awayName} has kicked off — ${match.competition}`,
         url: `/match/${id}`,
+      }, {
+        teamIds: [match.homeTeamId, match.awayTeamId].filter((teamId): teamId is number => teamId !== null),
+        tournamentId: match.tournamentId,
       })
     );
   }
 
   // Send push notification when match transitions to finished
-  if (old?.status !== "finished" && match.status === "finished") {
+  const [finishedClaim] = await db.update(matchesTable)
+    .set({ finishedNotificationSent: true })
+    .where(and(
+      eq(matchesTable.id, id),
+      eq(matchesTable.status, "finished"),
+      eq(matchesTable.finishedNotificationSent, false),
+    ))
+    .returning({ id: matchesTable.id });
+  if (finishedClaim) {
     await ensureMatchLineupsFromSquads(id);
     const homeName = row.homeTeam?.name ?? "Home";
     const awayName = row.awayTeam?.name ?? "Away";
@@ -347,6 +363,9 @@ router.patch("/matches/:id", async (req, res) => {
         title: "🏁 Full Time",
         body: `${homeName} ${homeScore}–${awayScore} ${awayName} — ${match.competition}`,
         url: `/match/${id}`,
+      }, {
+        teamIds: [match.homeTeamId, match.awayTeamId].filter((teamId): teamId is number => teamId !== null),
+        tournamentId: match.tournamentId,
       })
     );
   }

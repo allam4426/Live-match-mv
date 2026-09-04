@@ -1,6 +1,34 @@
 import { useState, useEffect, useCallback } from "react";
 
 type PermissionState = "default" | "granted" | "denied" | "unsupported";
+export type PushPreferences = {
+  teams: number[];
+  tournaments: number[];
+};
+
+const PREF_KEY = "livemv_notif_prefs";
+const EMPTY_PREFERENCES: PushPreferences = { teams: [], tournaments: [] };
+
+function getStoredPreferences(): PushPreferences {
+  try {
+    const raw = localStorage.getItem(PREF_KEY);
+    if (!raw) return EMPTY_PREFERENCES;
+    const parsed = JSON.parse(raw) as Partial<PushPreferences>;
+    return {
+      teams: Array.isArray(parsed.teams) ? parsed.teams.filter(Number.isInteger) : [],
+      tournaments: Array.isArray(parsed.tournaments) ? parsed.tournaments.filter(Number.isInteger) : [],
+    };
+  } catch {
+    return EMPTY_PREFERENCES;
+  }
+}
+
+function preferencesBody(preferences: PushPreferences) {
+  return {
+    teamIds: preferences.teams,
+    tournamentIds: preferences.tournaments,
+  };
+}
 
 export function usePushNotifications() {
   const [permission, setPermission] = useState<PermissionState>("default");
@@ -22,11 +50,12 @@ export function usePushNotifications() {
 
         const keyRes = await fetch("/api/push/vapid-public-key");
         if (!keyRes.ok) throw new Error("Push notifications are not configured");
-        const { publicKey } = await keyRes.json();
+        const { publicKey } = await keyRes.json() as { publicKey?: string };
+        if (!publicKey) throw new Error("Push notifications are not configured");
         const serverKey = urlBase64ToUint8Array(publicKey);
-        const subscriptionKey = sub.options.applicationServerKey;
+        const subscriptionKey = sub?.options.applicationServerKey;
 
-        if (subscriptionKey && !keysMatch(subscriptionKey, serverKey)) {
+        if (sub && subscriptionKey && !keysMatch(subscriptionKey, serverKey)) {
           await sub.unsubscribe();
           sub = null;
         }
@@ -46,7 +75,7 @@ export function usePushNotifications() {
         const syncRes = await fetch("/api/push/subscribe", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(sub.toJSON()),
+          body: JSON.stringify({ ...sub.toJSON(), ...preferencesBody(getStoredPreferences()) }),
           credentials: "include",
         });
         if (!syncRes.ok) throw new Error(`Subscription sync failed (${syncRes.status})`);
@@ -61,13 +90,14 @@ export function usePushNotifications() {
     return () => { cancelled = true; };
   }, []);
 
-  const subscribe = useCallback(async () => {
+  const subscribe = useCallback(async (preferences: PushPreferences = getStoredPreferences()) => {
     if (!("serviceWorker" in navigator)) return;
     setLoading(true);
     try {
       const keyRes = await fetch("/api/push/vapid-public-key");
       if (!keyRes.ok) throw new Error("Push notifications are not configured");
-      const { publicKey } = await keyRes.json();
+      const { publicKey } = await keyRes.json() as { publicKey?: string };
+      if (!publicKey) throw new Error("Push notifications are not configured");
       const serverKey = urlBase64ToUint8Array(publicKey);
 
       const perm = await Notification.requestPermission();
@@ -89,7 +119,7 @@ export function usePushNotifications() {
       const subscribeRes = await fetch("/api/push/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(sub.toJSON()),
+        body: JSON.stringify({ ...sub.toJSON(), ...preferencesBody(preferences) }),
         credentials: "include",
       });
       if (!subscribeRes.ok) throw new Error(`Subscription registration failed (${subscribeRes.status})`);
@@ -99,6 +129,20 @@ export function usePushNotifications() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  const updatePreferences = useCallback(async (preferences: PushPreferences) => {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (!sub) return false;
+    const response = await fetch("/api/push/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...sub.toJSON(), ...preferencesBody(preferences) }),
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error(`Notification preferences update failed (${response.status})`);
+    return true;
   }, []);
 
   const unsubscribe = useCallback(async () => {
@@ -123,7 +167,7 @@ export function usePushNotifications() {
     }
   }, []);
 
-  return { permission, subscribed, loading, subscribe, unsubscribe };
+  return { permission, subscribed, loading, subscribe, updatePreferences, unsubscribe };
 }
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {

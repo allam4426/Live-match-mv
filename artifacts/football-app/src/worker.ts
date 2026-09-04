@@ -27,6 +27,27 @@ type Bindings = {
 const app = new Hono<{ Bindings: Bindings }>();
 type WorkerDb = ReturnType<typeof drizzle<typeof schema>>;
 
+/* Cache public reads briefly at the edge so repeated app refreshes do not
+ * turn into a D1 query for every visitor. Live views still refresh often. */
+app.use("/api/*", async (c, next) => {
+  if (c.req.method !== "GET" || c.req.path.startsWith("/api/admin")) {
+    return next();
+  }
+
+  const cacheKey = new Request(c.req.url, { method: "GET" });
+  const edgeCache = (caches as unknown as { default: Cache }).default;
+  const cached = await edgeCache.match(cacheKey);
+  if (cached) return cached;
+
+  await next();
+  if (c.res.status < 200 || c.res.status >= 300) return c.res;
+
+  const cacheResponse = c.res.clone();
+  cacheResponse.headers.set("Cache-Control", "public, max-age=15, s-maxage=15");
+  c.executionCtx.waitUntil(edgeCache.put(cacheKey, cacheResponse));
+  return c.res;
+});
+
 /* ─── teams routes ─── */
 
 app.get("/api/teams", async (c) => {
@@ -1057,7 +1078,9 @@ app.get("/api/matches", async (c) => {
   const matchIds = rows.map((r) => r.match.id);
 
   const [streamCounts, cardCountMap, penGoalsMap] = await Promise.all([
-    matchIds.length > 0 ? db.select().from(schema.streamsTable) : Promise.resolve([]),
+    matchIds.length > 0
+      ? db.select().from(schema.streamsTable).where(inArray(schema.streamsTable.matchId, matchIds))
+      : Promise.resolve([]),
     fetchCardCounts(db, matchIds, rows),
     fetchPenaltyGoals(db, matchIds, rows),
   ]);
@@ -1128,6 +1151,7 @@ async function sendPushToAll(
   env: Bindings,
   db: WorkerDb,
   notification: { title: string; body: string; url?: string },
+  filter: { teamIds: number[]; tournamentId: number | null },
 ): Promise<void> {
   const vapid = getVapidKeys(env);
   if (!vapid) {
@@ -1136,14 +1160,31 @@ async function sendPushToAll(
   }
 
   const subscriptions = await db.select().from(schema.pushSubscriptionsTable);
-  if (subscriptions.length === 0) return;
+  const selectedTournamentId = filter.tournamentId;
+  const matchingSubscriptions = subscriptions.filter((sub) => {
+    let teamIds: unknown;
+    let tournamentIds: unknown;
+    try {
+      teamIds = JSON.parse(sub.teamIds);
+      tournamentIds = JSON.parse(sub.tournamentIds);
+    } catch {
+      return false;
+    }
+    const followsTeam = Array.isArray(teamIds)
+      && filter.teamIds.some((teamId) => teamIds.includes(teamId));
+    const followsTournament = selectedTournamentId !== null
+      && Array.isArray(tournamentIds)
+      && tournamentIds.includes(selectedTournamentId);
+    return followsTeam || followsTournament;
+  });
+  if (matchingSubscriptions.length === 0) return;
 
   const message: PushMessage = {
     data: JSON.stringify({ ...notification, icon: "/logo.png" }),
     options: { ttl: 300, urgency: "high" },
   };
 
-  await Promise.allSettled(subscriptions.map(async (sub) => {
+  await Promise.allSettled(matchingSubscriptions.map(async (sub) => {
     const subscription: WebPushSubscription = {
       endpoint: sub.endpoint,
       expirationTime: null,
@@ -1174,13 +1215,16 @@ async function sendPushToAll(
 async function sendLiveMatchNotifications(
   env: Bindings,
   db: WorkerDb,
-  row: { homeTeam: schema.Team | null; awayTeam: schema.Team | null },
+  row: { match: schema.Match; homeTeam: schema.Team | null; awayTeam: schema.Team | null },
 ): Promise<void> {
   const homeName = row.homeTeam?.name ?? "TBD";
   const awayName = row.awayTeam?.name ?? "TBD";
   await sendPushToAll(env, db, {
     title: "Match Live!",
     body: `${homeName} vs ${awayName} has started`,
+  }, {
+    teamIds: [row.match.homeTeamId, row.match.awayTeamId].filter((id): id is number => id !== null),
+    tournamentId: row.match.tournamentId,
   });
 }
 
@@ -1199,6 +1243,9 @@ async function sendFinishedMatchNotifications(
     title: "Full Time",
     body: `${homeName} ${row.match.homeScore ?? 0}–${row.match.awayScore ?? 0} ${awayName} — ${row.match.competition}`,
     url: `/match/${row.match.id}`,
+  }, {
+    teamIds: [row.match.homeTeamId, row.match.awayTeamId].filter((id): id is number => id !== null),
+    tournamentId: row.match.tournamentId,
   });
 }
 
@@ -1210,16 +1257,31 @@ app.patch("/api/matches/:id", async (c) => {
   const updateData: Record<string, unknown> = { ...rest };
   if (kickoffAt) updateData.kickoffAt = new Date(kickoffAt);
 
-  const [oldMatch] = await db.select().from(schema.matchesTable).where(eq(schema.matchesTable.id, id));
   const [match] = await db.update(schema.matchesTable).set(updateData).where(eq(schema.matchesTable.id, id)).returning();
   if (!match) return c.json({ error: "Match not found" }, 404);
 
   const rows = await joinMatchRows(db, [match]);
   const streamRows = await db.select().from(schema.streamsTable).where(eq(schema.streamsTable.matchId, id));
-  if (match.status === "live" && oldMatch && oldMatch.status !== "live") {
+  const [liveClaim] = await db.update(schema.matchesTable)
+    .set({ liveNotificationSent: true })
+    .where(and(
+      eq(schema.matchesTable.id, id),
+      eq(schema.matchesTable.status, "live"),
+      eq(schema.matchesTable.liveNotificationSent, false),
+    ))
+    .returning({ id: schema.matchesTable.id });
+  if (liveClaim) {
     c.executionCtx.waitUntil(sendLiveMatchNotifications(c.env, db, rows[0]));
   }
-  if (match.status === "finished" && oldMatch && oldMatch.status !== "finished") {
+  const [finishedClaim] = await db.update(schema.matchesTable)
+    .set({ finishedNotificationSent: true })
+    .where(and(
+      eq(schema.matchesTable.id, id),
+      eq(schema.matchesTable.status, "finished"),
+      eq(schema.matchesTable.finishedNotificationSent, false),
+    ))
+    .returning({ id: schema.matchesTable.id });
+  if (finishedClaim) {
     await ensureMatchLineupsFromSquads(db, id);
     c.executionCtx.waitUntil(sendFinishedMatchNotifications(c.env, db, rows[0]));
   }
@@ -1568,7 +1630,14 @@ function isAllowedPushEndpoint(endpoint: string): boolean {
 type PushSubscriptionBody = {
   endpoint?: string;
   keys?: { p256dh?: string; auth?: string };
+  teamIds?: unknown;
+  tournamentIds?: unknown;
 };
+
+function normalizePushPreferenceIds(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((id): id is number => Number.isInteger(id) && id > 0))];
+}
 
 app.post("/api/push/subscribe", async (c) => {
   const db = drizzle(c.env.DB, { schema });
@@ -1578,8 +1647,26 @@ app.post("/api/push/subscribe", async (c) => {
   const { endpoint, keys } = body ?? {};
   if (!endpoint || !keys?.p256dh || !keys?.auth) return c.json({ error: "Invalid subscription object" }, 400);
   if (!isAllowedPushEndpoint(endpoint)) return c.json({ error: "Unsupported push service" }, 400);
+  const teamIds = JSON.stringify(normalizePushPreferenceIds(body.teamIds));
+  const tournamentIds = JSON.stringify(normalizePushPreferenceIds(body.tournamentIds));
   try {
-    await db.insert(schema.pushSubscriptionsTable).values({ endpoint, p256dh: keys.p256dh, auth: keys.auth });
+    const [existing] = await db
+      .select({ id: schema.pushSubscriptionsTable.id })
+      .from(schema.pushSubscriptionsTable)
+      .where(eq(schema.pushSubscriptionsTable.endpoint, endpoint));
+    if (existing) {
+      await db.update(schema.pushSubscriptionsTable)
+        .set({ p256dh: keys.p256dh, auth: keys.auth, teamIds, tournamentIds })
+        .where(eq(schema.pushSubscriptionsTable.id, existing.id));
+    } else {
+      await db.insert(schema.pushSubscriptionsTable).values({
+        endpoint,
+        p256dh: keys.p256dh,
+        auth: keys.auth,
+        teamIds,
+        tournamentIds,
+      });
+    }
   } catch { /* already subscribed, ignore */ }
   return c.json({ success: true }, 201);
 });
@@ -1716,6 +1803,9 @@ app.post("/api/matches/:id/events", requireAdmin, async (c) => {
         title: notification.title,
         body: `${notification.body} — ${matchLabel}`,
         url: `/match/${matchId}`,
+      }, {
+        teamIds: [matchRow.homeTeamId, matchRow.awayTeamId].filter((id): id is number => id !== null),
+        tournamentId: matchRow.tournamentId,
       }));
     }
   }

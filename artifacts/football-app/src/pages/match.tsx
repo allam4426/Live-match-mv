@@ -1199,6 +1199,8 @@ function SquadAvatar({
   events: SummaryEvent[];
   side: "home" | "away";
 }) {
+  const [failedPhotoUrl, setFailedPhotoUrl] = useState<string | null>(null);
+  const [loadedPhotoUrl, setLoadedPhotoUrl] = useState<string | null>(null);
   const isCaptain = player.role === "captain";
   const gk = isGoalkeeper(player);
   const coach = isCoach(player);
@@ -1220,23 +1222,30 @@ function SquadAvatar({
     (e) =>
       e.type === "substitution" && e.description?.includes(player.playerName),
   );
+  const canLoadPhoto = Boolean(player.photoUrl && player.photoUrl !== failedPhotoUrl);
+  const showPhoto = canLoadPhoto && loadedPhotoUrl === player.photoUrl;
 
   return (
     <div className="relative shrink-0">
       <div
         className={cn(
           "w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-black text-white overflow-hidden",
-          !player.photoUrl && (coach
+           !showPhoto && (coach
             ? "bg-violet-700"
             : gk
               ? "bg-teal-600"
               : avatarColor(player.playerName)),
         )}
       >
-        {player.photoUrl ? (
-          <img src={player.photoUrl} alt={player.playerName} className="w-full h-full object-cover" />
-        ) : (
-          initials(player.playerName)
+        {!showPhoto && initials(player.playerName)}
+        {canLoadPhoto && (
+          <img
+            src={player.photoUrl ?? undefined}
+            alt={player.playerName}
+            className={cn("absolute inset-0 w-full h-full object-cover transition-opacity", showPhoto ? "opacity-100" : "opacity-0")}
+            onLoad={() => setLoadedPhotoUrl(player.photoUrl ?? null)}
+            onError={() => setFailedPhotoUrl(player.photoUrl ?? null)}
+          />
         )}
       </div>
       {/* Role badges — top-left */}
@@ -1438,6 +1447,8 @@ function PitchPlayerNode({
 }: {
   player: LineupPlayer; events: SummaryEvent[]; x: number; y: number;
 }) {
+  const [failedPhotoUrl, setFailedPhotoUrl] = useState<string | null>(null);
+  const [loadedPhotoUrl, setLoadedPhotoUrl] = useState<string | null>(null);
   const pe = events.filter(e => e.playerName === player.playerName);
   const goals = pe.filter(e => ["goal","penalty_goal","ten_meter_goal"].includes(e.type)).length;
   const hasOwnGoal = pe.some(e => e.type === "own_goal");
@@ -1446,6 +1457,8 @@ function PitchPlayerNode({
   const isCaptain = player.role === "captain";
   const gk = isGoalkeeper(player);
   const lastName = player.playerName.trim().split(/\s+/).pop() ?? player.playerName;
+  const canLoadPhoto = Boolean(player.photoUrl && player.photoUrl !== failedPhotoUrl);
+  const showPhoto = canLoadPhoto && loadedPhotoUrl === player.photoUrl;
 
   return (
     <div
@@ -1455,11 +1468,18 @@ function PitchPlayerNode({
       <div className="relative">
         <div className={cn(
           "w-8 h-8 rounded-full border-2 border-white/40 flex items-center justify-center text-[10px] font-black text-white overflow-hidden shadow-xl",
-          !player.photoUrl && (gk ? "bg-teal-600" : "bg-[#1a3a70]"),
+           !showPhoto && (gk ? "bg-teal-600" : "bg-[#1a3a70]"),
         )}>
-          {player.photoUrl
-            ? <img src={player.photoUrl} alt={player.playerName} className="w-full h-full object-cover" />
-            : <span>{player.playerNumber || initials(player.playerName)}</span>}
+           {!showPhoto && <span>{player.playerNumber || initials(player.playerName)}</span>}
+           {canLoadPhoto && (
+             <img
+                 src={player.photoUrl ?? undefined}
+                 alt={player.playerName}
+                 className={cn("absolute inset-0 w-full h-full object-cover transition-opacity", showPhoto ? "opacity-100" : "opacity-0")}
+                 onLoad={() => setLoadedPhotoUrl(player.photoUrl ?? null)}
+                 onError={() => setFailedPhotoUrl(player.photoUrl ?? null)}
+               />
+           )}
         </div>
         {isCaptain && (
           <span className="absolute -top-1 -left-1 w-3 h-3 rounded-full bg-amber-400 border border-black/20 flex items-center justify-center text-[6px] font-black text-black">C</span>

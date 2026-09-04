@@ -3,25 +3,29 @@ import { useParams, Link } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronLeft, User, Target, Handshake, Shield, AlertTriangle, CircleX, Swords } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
 
 function PlayerAvatar({ photoUrl, name }: { photoUrl?: string | null; name: string }) {
+  const [failedPhotoUrl, setFailedPhotoUrl] = useState<string | null>(null);
+  const [loadedPhotoUrl, setLoadedPhotoUrl] = useState<string | null>(null);
   const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const colors = ["bg-blue-600","bg-emerald-600","bg-purple-600","bg-orange-600","bg-teal-600","bg-red-600","bg-indigo-600","bg-pink-600"];
   const color = colors[name.charCodeAt(0) % colors.length];
+  const canLoadPhoto = Boolean(photoUrl && photoUrl !== failedPhotoUrl);
+  const showPhoto = canLoadPhoto && loadedPhotoUrl === photoUrl;
 
-  if (photoUrl) {
-    return (
-      <img
-        src={photoUrl}
-        alt={name}
-        className="w-24 h-24 rounded-full object-cover border-4 border-white/10 shadow-2xl"
-        onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
-      />
-    );
-  }
   return (
-    <div className={cn("w-24 h-24 rounded-full flex items-center justify-center text-3xl font-black text-white shadow-2xl border-4 border-white/10", color)}>
-      {initials}
+    <div className={cn("relative w-24 h-24 rounded-full flex items-center justify-center text-3xl font-black text-white shadow-2xl border-4 border-white/10 overflow-hidden", color)}>
+      {!showPhoto && initials}
+      {canLoadPhoto && (
+      <img
+        src={photoUrl ?? undefined}
+        alt={name}
+        className={cn("absolute inset-0 w-full h-full rounded-full object-cover transition-opacity", showPhoto ? "opacity-100" : "opacity-0")}
+        onLoad={() => setLoadedPhotoUrl(photoUrl ?? null)}
+        onError={() => setFailedPhotoUrl(photoUrl ?? null)}
+      />
+      )}
     </div>
   );
 }

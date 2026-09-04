@@ -22,16 +22,43 @@ router.get("/push/vapid-public-key", (_req, res) => {
   res.json({ publicKey: vapidPublicKey });
 });
 
+type PushSubscriptionBody = {
+  endpoint?: string;
+  keys?: { p256dh?: string; auth?: string };
+  teamIds?: unknown;
+  tournamentIds?: unknown;
+};
+
+function normalizePushPreferenceIds(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((id): id is number => Number.isInteger(id) && id > 0))];
+}
+
 router.post("/push/subscribe", async (req, res) => {
-  const { endpoint, keys } = req.body ?? {};
+  const { endpoint, keys, teamIds, tournamentIds } = (req.body ?? {}) as PushSubscriptionBody;
   if (!endpoint || !keys?.p256dh || !keys?.auth) {
     res.status(400).json({ error: "Invalid subscription object" });
     return;
   }
-  await db
-    .insert(pushSubscriptionsTable)
-    .values({ endpoint, p256dh: keys.p256dh, auth: keys.auth })
-    .onConflictDoNothing();
+  const normalizedTeamIds = JSON.stringify(normalizePushPreferenceIds(teamIds));
+  const normalizedTournamentIds = JSON.stringify(normalizePushPreferenceIds(tournamentIds));
+  const [existing] = await db
+    .select({ id: pushSubscriptionsTable.id })
+    .from(pushSubscriptionsTable)
+    .where(eq(pushSubscriptionsTable.endpoint, endpoint));
+  if (existing) {
+    await db.update(pushSubscriptionsTable)
+      .set({ p256dh: keys.p256dh, auth: keys.auth, teamIds: normalizedTeamIds, tournamentIds: normalizedTournamentIds })
+      .where(eq(pushSubscriptionsTable.id, existing.id));
+  } else {
+    await db.insert(pushSubscriptionsTable).values({
+      endpoint,
+      p256dh: keys.p256dh,
+      auth: keys.auth,
+      teamIds: normalizedTeamIds,
+      tournamentIds: normalizedTournamentIds,
+    });
+  }
   res.status(201).json({ success: true });
 });
 
@@ -45,13 +72,32 @@ router.delete("/push/unsubscribe", async (req, res) => {
   res.json({ success: true });
 });
 
-export async function sendPushToAll(payload: { title: string; body: string; url?: string }) {
+export async function sendPushToAll(
+  payload: { title: string; body: string; url?: string },
+  filter: { teamIds: number[]; tournamentId: number | null },
+) {
   if (!vapidPublicKey || !vapidPrivateKey) return;
   const subs = await db.select().from(pushSubscriptionsTable);
+  const matchingSubs = subs.filter((sub) => {
+    let teamIds: unknown;
+    let tournamentIds: unknown;
+    try {
+      teamIds = JSON.parse(sub.teamIds);
+      tournamentIds = JSON.parse(sub.tournamentIds);
+    } catch {
+      return false;
+    }
+    const followsTeam = Array.isArray(teamIds)
+      && filter.teamIds.some((teamId) => teamIds.includes(teamId));
+    const followsTournament = filter.tournamentId !== null
+      && Array.isArray(tournamentIds)
+      && tournamentIds.includes(filter.tournamentId);
+    return followsTeam || followsTournament;
+  });
   const dead: string[] = [];
 
   await Promise.allSettled(
-    subs.map(async (sub) => {
+    matchingSubs.map(async (sub) => {
       try {
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },

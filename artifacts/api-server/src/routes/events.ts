@@ -174,6 +174,9 @@ router.post("/matches/:id/events", async (req, res) => {
           title,
           body: `${body} — ${matchLabel}`,
           url: `/match/${matchId}`,
+        }, {
+          teamIds: [row.match.homeTeamId, row.match.awayTeamId].filter((teamId): teamId is number => teamId !== null),
+          tournamentId: row.match.tournamentId,
         });
       }
     } catch { /* never crash the request */ }

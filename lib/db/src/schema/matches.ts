@@ -21,6 +21,8 @@ export const matchesTable = pgTable("matches", {
   venue: text("venue"),
   matchGroup: text("match_group"),
   clockAnchorMs: bigint("clock_anchor_ms", { mode: "number" }),
+  liveNotificationSent: boolean("live_notification_sent").notNull().default(false),
+  finishedNotificationSent: boolean("finished_notification_sent").notNull().default(false),
 });
 
 export const insertMatchSchema = createInsertSchema(matchesTable).omit({ id: true });
