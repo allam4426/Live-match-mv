@@ -172,7 +172,7 @@ export default function Home() {
   // Low-read polling: live cards refresh regularly, while the full fixture
   // list is allowed to stay cached much longer.
   useEffect(() => {
-    const liveId = setInterval(() => refetchLive(), 120000);
+    const liveId = setInterval(() => refetchLive(), 5000);
     const matchesId = setInterval(() => refetchMatches(), 300000);
     return () => {
       clearInterval(liveId);
