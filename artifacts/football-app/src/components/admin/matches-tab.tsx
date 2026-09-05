@@ -298,6 +298,14 @@ export function MatchesTab() {
                     <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full border capitalize", STATUS_COLORS[m.status as Status])}>
                       {m.status === "live" && m.minute ? `Live · ${m.minute}` : m.status}
                     </span>
+                    {m.status === "scheduled" && (
+                      <button
+                        onClick={() => updateMatch.mutate({ id: m.id, data: { status: "live" } }, { onSuccess: invalidate })}
+                        className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500 text-white"
+                      >
+                        Start
+                      </button>
+                    )}
                     <span className="text-[10px] text-muted-foreground capitalize">{m.sport}</span>
                     {m.matchGroup && (
                       <span className="text-[10px] text-muted-foreground/70 bg-muted/40 border border-border rounded px-1.5 py-0.5">

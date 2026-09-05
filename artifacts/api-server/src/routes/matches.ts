@@ -133,6 +133,7 @@ async function fetchPenaltyGoals(matchIds: number[], rows: Array<{ match: typeof
 }
 
 router.get("/matches", async (req, res) => {
+  res.setHeader("Cache-Control", "public, max-age=3, s-maxage=5");
   const params = ListMatchesQueryParams.safeParse({
     status: req.query.status,
     competition: req.query.competition,
@@ -231,7 +232,8 @@ router.post("/matches", async (req, res) => {
 });
 
 // IMPORTANT: /matches/live must be defined BEFORE /matches/:id
-router.get("/matches/live", async (req, res) => {
+  router.get("/matches/live", async (req, res) => {
+    res.setHeader("Cache-Control", "public, max-age=3, s-maxage=5");
   const sport = req.query.sport as string | undefined;
   const homeTeam = alias(teamsTable, "homeTeam");
   const awayTeam = alias(teamsTable, "awayTeam");
