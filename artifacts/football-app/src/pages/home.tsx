@@ -173,7 +173,7 @@ export default function Home() {
   // list is allowed to stay cached much longer.
   useEffect(() => {
     const liveId = setInterval(() => refetchLive(), 5000);
-    const matchesId = setInterval(() => refetchMatches(), 300000);
+    const matchesId = setInterval(() => refetchMatches(), 15000);
     return () => {
       clearInterval(liveId);
       clearInterval(matchesId);
