@@ -165,7 +165,7 @@ export default function Home() {
   const [showCalendar, setShowCalendar] = useState(false);
   const stripRef = useRef<HTMLDivElement>(null);
 
-  const { data: liveMatches, isLoading: liveLoading, refetch: refetchLive } = useListLiveMatches();
+  const { data: liveMatches, isLoading: liveLoading, refetch: refetchLive } = useListLiveMatches(undefined, { query: { staleTime: 0, gcTime: 60_000 } as any });
   const { data: allMatches, isLoading: matchesLoading, refetch: refetchMatches } = useListMatches({ limit: 100 });
   const { data: customSpotlights } = useListSpotlights();
 

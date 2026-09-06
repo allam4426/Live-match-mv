@@ -74,6 +74,9 @@ importers:
 
   .:
     devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^5.20260827.1
+        version: 5.20260827.1
       prettier:
         specifier: ^3.8.3
         version: 3.8.3

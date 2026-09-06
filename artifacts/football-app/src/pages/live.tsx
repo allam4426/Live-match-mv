@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { BannerSlot } from "@/components/banner-slot";
 
 export default function LiveMatches() {
-  const { data: matches, isLoading, refetch } = useListLiveMatches();
+  const { data: matches, isLoading, refetch } = useListLiveMatches(undefined, { query: { staleTime: 0, gcTime: 60_000 } as any });
 
   // Keep the live page current without repeatedly reading the endpoint every
   // few seconds when a user leaves it open.
