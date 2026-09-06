@@ -30,7 +30,8 @@ type WorkerDb = ReturnType<typeof drizzle<typeof schema>>;
 /* Cache public reads briefly at the edge so repeated app refreshes do not
  * turn into a D1 query for every visitor. Live views still refresh often. */
 app.use("/api/*", async (c, next) => {
-  if (c.req.method !== "GET" || c.req.path.startsWith("/api/admin")) {
+  const isAdminSession = c.req.raw.headers.get("cookie")?.includes("fl_admin=") ?? false;
+  if (c.req.method !== "GET" || c.req.path.startsWith("/api/admin") || isAdminSession) {
     return next();
   }
 
