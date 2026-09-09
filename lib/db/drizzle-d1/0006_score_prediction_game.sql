@@ -1,0 +1,10 @@
+ALTER TABLE match_predictions ADD COLUMN user_id TEXT;
+ALTER TABLE match_predictions ADD COLUMN display_name TEXT NOT NULL DEFAULT 'Player';
+ALTER TABLE match_predictions ADD COLUMN avatar_url TEXT;
+ALTER TABLE match_predictions ADD COLUMN points INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE match_predictions ADD COLUMN status TEXT NOT NULL DEFAULT 'pending';
+ALTER TABLE match_predictions ADD COLUMN submitted_at INTEGER;
+ALTER TABLE match_predictions ADD COLUMN locked_at INTEGER;
+ALTER TABLE match_predictions ADD COLUMN calculated_at INTEGER;
+CREATE INDEX IF NOT EXISTS match_predictions_match_idx ON match_predictions(match_id);
+CREATE INDEX IF NOT EXISTS match_predictions_user_idx ON match_predictions(user_id);
