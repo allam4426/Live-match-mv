@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, matchesTable, teamsTable, streamsTable, matchEventsTable } from "@workspace/db";
+import { db, matchesTable, teamsTable, streamsTable, matchEventsTable, matchPredictionsTable } from "@workspace/db";
 import { eq, and, desc, count, inArray } from "drizzle-orm";
 import { sendPushToAll } from "./push";
 import {
@@ -296,6 +296,55 @@ router.get("/matches/:id", async (req, res) => {
   });
 });
 
+
+    const VISITOR_ID_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
+    function getPredictionVisitorId(req: any, body?: any) {
+    const value = req.get("x-prediction-visitor") ?? req.query.visitorId ?? body?.visitorId;
+    return typeof value === "string" && VISITOR_ID_PATTERN.test(value) ? value : null;
+    }
+    function parsePredictionScore(value: unknown) {
+    const score = typeof value === "number" ? value : Number(value);
+    return Number.isInteger(score) && score >= 0 && score <= 30 ? score : null;
+    }
+    function predictionsAreOpen(match: { status: string; kickoffAt: Date }) {
+    return match.status === "scheduled" && match.kickoffAt.getTime() > Date.now();
+    }
+    router.get("/matches/:id/prediction", async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid match id" }); return; }
+    const [match] = await db.select({ id: matchesTable.id, status: matchesTable.status, kickoffAt: matchesTable.kickoffAt }).from(matchesTable).where(eq(matchesTable.id, id));
+    if (!match) { res.status(404).json({ error: "Match not found" }); return; }
+    const visitorId = getPredictionVisitorId(req);
+    const predictionCount = count();
+    const [total, distribution, mine] = await Promise.all([
+      db.select({ value: predictionCount }).from(matchPredictionsTable).where(eq(matchPredictionsTable.matchId, id)),
+      db.select({ homeScore: matchPredictionsTable.homeScore, awayScore: matchPredictionsTable.awayScore, count: predictionCount }).from(matchPredictionsTable).where(eq(matchPredictionsTable.matchId, id)).groupBy(matchPredictionsTable.homeScore, matchPredictionsTable.awayScore).orderBy(desc(predictionCount)),
+      visitorId ? db.select({ homeScore: matchPredictionsTable.homeScore, awayScore: matchPredictionsTable.awayScore }).from(matchPredictionsTable).where(and(eq(matchPredictionsTable.matchId, id), eq(matchPredictionsTable.visitorId, visitorId))).limit(1) : Promise.resolve([]),
+    ]);
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ canPredict: predictionsAreOpen(match), totalPredictions: Number(total[0]?.value ?? 0), myPrediction: mine[0] ?? null, distribution: distribution.map((item) => ({ ...item, count: Number(item.count) })) });
+    });
+    router.post("/matches/:id/prediction", async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid match id" }); return; }
+    const [match] = await db.select({ id: matchesTable.id, status: matchesTable.status, kickoffAt: matchesTable.kickoffAt }).from(matchesTable).where(eq(matchesTable.id, id));
+    if (!match) { res.status(404).json({ error: "Match not found" }); return; }
+    if (!predictionsAreOpen(match)) { res.status(409).json({ error: "Predictions are closed for this match" }); return; }
+    const visitorId = getPredictionVisitorId(req, req.body);
+    const homeScore = parsePredictionScore(req.body?.homeScore);
+    const awayScore = parsePredictionScore(req.body?.awayScore);
+    if (!visitorId) { res.status(400).json({ error: "Prediction visitor id is required" }); return; }
+    if (homeScore === null || awayScore === null) { res.status(400).json({ error: "Scores must be whole numbers from 0 to 30" }); return; }
+    await db.insert(matchPredictionsTable).values({ matchId: id, visitorId, homeScore, awayScore }).onConflictDoUpdate({ target: [matchPredictionsTable.matchId, matchPredictionsTable.visitorId], set: { homeScore, awayScore, updatedAt: new Date() } });
+    const predictionCount = count();
+    const [total, distribution] = await Promise.all([
+      db.select({ value: predictionCount }).from(matchPredictionsTable).where(eq(matchPredictionsTable.matchId, id)),
+      db.select({ homeScore: matchPredictionsTable.homeScore, awayScore: matchPredictionsTable.awayScore, count: predictionCount }).from(matchPredictionsTable).where(eq(matchPredictionsTable.matchId, id)).groupBy(matchPredictionsTable.homeScore, matchPredictionsTable.awayScore).orderBy(desc(predictionCount)),
+    ]);
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ canPredict: true, totalPredictions: Number(total[0]?.value ?? 0), myPrediction: { homeScore, awayScore }, distribution: distribution.map((item) => ({ ...item, count: Number(item.count) })) });
+    });
+    
 router.patch("/matches/:id", async (req, res) => {
   const { id } = UpdateMatchParams.parse({ id: Number(req.params.id) });
   const parsed = UpdateMatchBody.safeParse(req.body);
