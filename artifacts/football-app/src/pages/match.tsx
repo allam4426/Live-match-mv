@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { PenaltyIcon } from "@/components/penalty-icon";
 import { SubstitutionIcon } from "@/components/substitution-icon";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
+import { MatchPrediction } from "@/components/match-prediction";
 
 /* ─── helpers ─── */
 
@@ -2185,6 +2186,8 @@ export default function MatchDetails() {
           )}
         </div>
       </div>
+
+      <MatchPrediction matchId={matchId} match={match} />
 
       {/* ── YouTube embed ── */}
       {(() => {
