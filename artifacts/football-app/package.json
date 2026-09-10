@@ -85,6 +85,8 @@
     "bcryptjs": "^3.0.3",
     "drizzle-orm": "catalog:",
     "hls.js": "^1.6.16",
-    "hono": "^4.13.5"
+    "hono": "^4.13.5",
+    "@clerk/backend": "^2.20.0",
+    "@clerk/react": "^5.61.0"
   }
 }
