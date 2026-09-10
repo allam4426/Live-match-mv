@@ -87,6 +87,6 @@
     "hls.js": "^1.6.16",
     "hono": "^4.13.5",
     "@clerk/backend": "^2.20.0",
-    "@clerk/react": "^5.61.0"
+    "@clerk/react": "^6.15.2"
   }
 }
