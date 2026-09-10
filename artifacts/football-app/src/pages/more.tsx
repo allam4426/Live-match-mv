@@ -13,7 +13,7 @@ const NAV_TILES = [
   { label: "Stats Center", icon: BarChart3, href: "/tournaments" },
   { label: "Tournaments", icon: Trophy, href: "/tournaments" },
   { label: "Live streams", icon: Play, href: "/live" },
-  { label: "Games", icon: Gamepad2, href: null },
+  { label: "Games", icon: Gamepad2, href: "/more/games" },
   { label: "News", icon: Newspaper, href: null },
 ] as const;
 
