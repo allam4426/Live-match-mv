@@ -179,7 +179,7 @@ function useLiveStopwatch(
 }
 
 /* ─── tabs ─── */
-type Tab = "Summary" | "Stats" | "Squad" | "Standings";
+type Tab = "Summary" | "Stats" | "Squad" | "Standings" | "Prediction";
 
 type H2HMatch = {
   id: number;
@@ -1963,6 +1963,7 @@ export default function MatchDetails() {
 
   const tabs: Tab[] = [
     "Summary",
+    "Prediction",
     "Stats",
     "Squad",
     ...(hasTournament ? ["Standings" as Tab] : []),
@@ -2187,8 +2188,6 @@ export default function MatchDetails() {
         </div>
       </div>
 
-      <MatchPrediction matchId={matchId} match={match} />
-
       {/* ── YouTube embed ── */}
       {(() => {
         const ytStream = (match.streams ?? []).find(s => getYouTubeId(s.url));
@@ -2244,6 +2243,7 @@ export default function MatchDetails() {
       {/* ── Tab content ── */}
       <div className="mx-4 mt-2">
         {activeTab === "Summary" && <SummaryTab match={match} />}
+        {activeTab === "Prediction" && <MatchPrediction matchId={matchId} match={match} />}
         {activeTab === "Stats" && <StatsTab match={match} />}
         {activeTab === "Squad" && <SquadTab matchId={matchId} match={match} />}
         {activeTab === "Standings" && hasTournament && (
