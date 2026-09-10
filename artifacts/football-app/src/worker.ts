@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { getSignedCookie, setSignedCookie, deleteCookie } from "hono/cookie";
 import bcrypt from "bcryptjs";
+import { verifyToken } from "@clerk/backend";
 import { drizzle } from "drizzle-orm/d1";
 import { eq, or, desc, inArray, and, asc, count as sqlCount, sql } from "drizzle-orm";
 import * as schema from "@workspace/db/schema-d1";
@@ -22,6 +23,7 @@ type Bindings = {
   VAPID_SERVER_PUBLIC_KEY?: string;
   VAPID_SERVER_PRIVATE_KEY?: string;
   VAPID_SUBJECT?: string;
+  CLERK_SECRET_KEY?: string;
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -1138,53 +1140,89 @@ app.get("/api/matches/:id", async (c) => {
 });
 
 
-    const VISITOR_ID_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
-    function getPredictionVisitorId(c: any, body?: any) {
-    const value = c.req.header("x-prediction-visitor") ?? c.req.query("visitorId") ?? body?.visitorId;
-    return typeof value === "string" && VISITOR_ID_PATTERN.test(value) ? value : null;
-    }
-    function parsePredictionScore(value: unknown) {
-    const score = typeof value === "number" ? value : Number(value);
-    return Number.isInteger(score) && score >= 0 && score <= 30 ? score : null;
-    }
-    function predictionsAreOpen(match: { status: string; kickoffAt: Date }) {
-    return match.status === "scheduled" && match.kickoffAt.getTime() > Date.now();
-    }
-    app.get("/api/matches/:id/prediction", async (c) => {
-    const db = drizzle(c.env.DB, { schema });
-    const id = Number(c.req.param("id"));
-    if (!Number.isInteger(id)) return c.json({ error: "Invalid match id" }, 400);
-    const [match] = await db.select({ id: schema.matchesTable.id, status: schema.matchesTable.status, kickoffAt: schema.matchesTable.kickoffAt }).from(schema.matchesTable).where(eq(schema.matchesTable.id, id));
-    if (!match) return c.json({ error: "Match not found" }, 404);
-    const visitorId = getPredictionVisitorId(c);
-    const [total, distribution, mine] = await Promise.all([
-      db.select({ value: sqlCount() }).from(schema.matchPredictionsTable).where(eq(schema.matchPredictionsTable.matchId, id)),
-      db.select({ homeScore: schema.matchPredictionsTable.homeScore, awayScore: schema.matchPredictionsTable.awayScore, count: sqlCount() }).from(schema.matchPredictionsTable).where(eq(schema.matchPredictionsTable.matchId, id)).groupBy(schema.matchPredictionsTable.homeScore, schema.matchPredictionsTable.awayScore).orderBy(desc(sqlCount())),
-      visitorId ? db.select({ homeScore: schema.matchPredictionsTable.homeScore, awayScore: schema.matchPredictionsTable.awayScore }).from(schema.matchPredictionsTable).where(and(eq(schema.matchPredictionsTable.matchId, id), eq(schema.matchPredictionsTable.visitorId, visitorId))).limit(1) : Promise.resolve([]),
-    ]);
-    return c.json({ canPredict: predictionsAreOpen(match), totalPredictions: Number(total[0]?.value ?? 0), myPrediction: mine[0] ?? null, distribution: distribution.map((item) => ({ ...item, count: Number(item.count) })) }, 200, { "Cache-Control": "no-store" });
-    });
-    app.post("/api/matches/:id/prediction", async (c) => {
-    const db = drizzle(c.env.DB, { schema });
-    const id = Number(c.req.param("id"));
-    if (!Number.isInteger(id)) return c.json({ error: "Invalid match id" }, 400);
-    const [match] = await db.select({ id: schema.matchesTable.id, status: schema.matchesTable.status, kickoffAt: schema.matchesTable.kickoffAt }).from(schema.matchesTable).where(eq(schema.matchesTable.id, id));
-    if (!match) return c.json({ error: "Match not found" }, 404);
-    if (!predictionsAreOpen(match)) return c.json({ error: "Predictions are closed for this match" }, 409);
-    const body = await c.req.json();
-    const visitorId = getPredictionVisitorId(c, body);
-    const homeScore = parsePredictionScore(body?.homeScore);
-    const awayScore = parsePredictionScore(body?.awayScore);
-    if (!visitorId) return c.json({ error: "Prediction visitor id is required" }, 400);
-    if (homeScore === null || awayScore === null) return c.json({ error: "Scores must be whole numbers from 0 to 30" }, 400);
-    await db.insert(schema.matchPredictionsTable).values({ matchId: id, visitorId, homeScore, awayScore }).onConflictDoUpdate({ target: [schema.matchPredictionsTable.matchId, schema.matchPredictionsTable.visitorId], set: { homeScore, awayScore, updatedAt: new Date() } });
-    const [total, distribution] = await Promise.all([
-      db.select({ value: sqlCount() }).from(schema.matchPredictionsTable).where(eq(schema.matchPredictionsTable.matchId, id)),
-      db.select({ homeScore: schema.matchPredictionsTable.homeScore, awayScore: schema.matchPredictionsTable.awayScore, count: sqlCount() }).from(schema.matchPredictionsTable).where(eq(schema.matchPredictionsTable.matchId, id)).groupBy(schema.matchPredictionsTable.homeScore, schema.matchPredictionsTable.awayScore).orderBy(desc(sqlCount())),
-    ]);
-    return c.json({ canPredict: true, totalPredictions: Number(total[0]?.value ?? 0), myPrediction: { homeScore, awayScore }, distribution: distribution.map((item) => ({ ...item, count: Number(item.count) })) }, 200, { "Cache-Control": "no-store" });
-    });
-    
+function parsePredictionScore(value: unknown) {
+  const score = typeof value === "number" ? value : Number(value);
+  return Number.isInteger(score) && score >= 0 && score <= 20 ? score : null;
+}
+function predictionsAreOpen(match: { status: string; kickoffAt: Date }) {
+  return match.status === "scheduled" && match.kickoffAt.getTime() - 180000 > Date.now();
+}
+function predictionOutcome(home: number, away: number) { return home === away ? 0 : home > away ? 1 : -1; }
+function calculatePredictionPoints(predHome: number, predAway: number, actualHome: number, actualAway: number) {
+  if (predHome === actualHome && predAway === actualAway) return 3;
+  return predictionOutcome(predHome, predAway) === predictionOutcome(actualHome, actualAway) ? 1 : 0;
+}
+async function getPredictionUserId(c: any): Promise<string | null> {
+  const header = c.req.header("Authorization");
+  if (!header?.startsWith("Bearer ") || !c.env.CLERK_SECRET_KEY) return null;
+  try { const payload = await verifyToken(header.slice(7), { secretKey: c.env.CLERK_SECRET_KEY }); return typeof payload.sub === "string" ? payload.sub : null; } catch { return null; }
+}
+async function isPredictionParticipant(c: any, tournamentId: number, userId: string) {
+  try { const row = await c.env.DB.prepare("SELECT id FROM prediction_participants WHERE tournament_id = ? AND user_id = ? LIMIT 1").bind(tournamentId, userId).first(); return Boolean(row); } catch { return false; }
+}
+async function settlePredictions(db: any, match: any) {
+  if (match.status !== "finished") return;
+  const rows = await db.select().from(schema.matchPredictionsTable).where(eq(schema.matchPredictionsTable.matchId, match.id));
+  for (const row of rows) {
+    if (row.status === "settled") continue;
+    const points = calculatePredictionPoints(row.homeScore, row.awayScore, match.homeScore ?? 0, match.awayScore ?? 0);
+    await db.update(schema.matchPredictionsTable).set({ points, status: "settled", calculatedAt: new Date(), lockedAt: row.lockedAt ?? new Date(), updatedAt: new Date() }).where(eq(schema.matchPredictionsTable.id, row.id));
+  }
+}
+async function predictionSummary(db: any, match: any, userId: string | null) {
+  await settlePredictions(db, match);
+  const [total, distribution, mine] = await Promise.all([
+    db.select({ value: sqlCount() }).from(schema.matchPredictionsTable).where(eq(schema.matchPredictionsTable.matchId, match.id)),
+    db.select({ homeScore: schema.matchPredictionsTable.homeScore, awayScore: schema.matchPredictionsTable.awayScore, count: sqlCount() }).from(schema.matchPredictionsTable).where(eq(schema.matchPredictionsTable.matchId, match.id)).groupBy(schema.matchPredictionsTable.homeScore, schema.matchPredictionsTable.awayScore).orderBy(desc(sqlCount())),
+    userId ? db.select({ homeScore: schema.matchPredictionsTable.homeScore, awayScore: schema.matchPredictionsTable.awayScore, points: schema.matchPredictionsTable.points, status: schema.matchPredictionsTable.status }).from(schema.matchPredictionsTable).where(and(eq(schema.matchPredictionsTable.matchId, match.id), eq(schema.matchPredictionsTable.userId, userId))).limit(1) : Promise.resolve([]),
+  ]);
+  const totalCount = Number(total[0]?.value ?? 0);
+  return { canPredict: predictionsAreOpen(match), locked: !predictionsAreOpen(match), totalPredictions: totalCount, myPrediction: mine[0] ?? null, distribution: distribution.map((item: any) => ({ homeScore: item.homeScore, awayScore: item.awayScore, count: Number(item.count), percentage: totalCount ? Math.round((Number(item.count) / totalCount) * 100) : 0 })) };
+}
+app.get("/api/predictions/tournaments/:id/me", async (c) => {
+  const userId = await getPredictionUserId(c); if (!userId) return c.json({ joined: false });
+  return c.json({ joined: await isPredictionParticipant(c, Number(c.req.param("id")), userId) });
+});
+app.post("/api/predictions/tournaments/:id/join", async (c) => {
+  const userId = await getPredictionUserId(c); if (!userId) return c.json({ error: "Sign in is required" }, 401);
+  const tournamentId = Number(c.req.param("id")); if (!Number.isInteger(tournamentId)) return c.json({ error: "Invalid tournament id" }, 400);
+  try { await c.env.DB.prepare("INSERT OR IGNORE INTO prediction_participants (tournament_id, user_id) VALUES (?, ?)").bind(tournamentId, userId).run(); return c.json({ joined: true }); } catch { return c.json({ error: "Prediction game is not ready yet" }, 503); }
+});
+async function getPredictionMatch(c: any, id: number) {
+  const db = drizzle(c.env.DB, { schema });
+  const [match] = await db.select({ id: schema.matchesTable.id, status: schema.matchesTable.status, kickoffAt: schema.matchesTable.kickoffAt, homeScore: schema.matchesTable.homeScore, awayScore: schema.matchesTable.awayScore, tournamentId: schema.matchesTable.tournamentId }).from(schema.matchesTable).where(eq(schema.matchesTable.id, id));
+  return { db, match };
+}
+async function handlePredictionGet(c: any) {
+  const id = Number(c.req.param("id")); if (!Number.isInteger(id)) return c.json({ error: "Invalid match id" }, 400);
+  const { db, match } = await getPredictionMatch(c, id); if (!match) return c.json({ error: "Match not found" }, 404);
+  return c.json(await predictionSummary(db, match, await getPredictionUserId(c)), 200, { "Cache-Control": "no-store" });
+}
+app.get("/api/matches/:id/prediction", handlePredictionGet);
+app.get("/api/matches/:id/predictions", handlePredictionGet);
+app.post("/api/matches/:id/prediction", async (c) => {
+  const userId = await getPredictionUserId(c); if (!userId) return c.json({ error: "Sign in is required to submit a prediction" }, 401);
+  const id = Number(c.req.param("id")); const { db, match } = await getPredictionMatch(c, id);
+  if (!match) return c.json({ error: "Match not found" }, 404);
+  if (!predictionsAreOpen(match)) return c.json({ error: "Predictions lock three minutes before kick-off" }, 409);
+  if (match.tournamentId && !(await isPredictionParticipant(c, match.tournamentId, userId))) return c.json({ error: "Participate in the tournament before guessing" }, 403);
+  const body = await c.req.json(); const homeScore = parsePredictionScore(body?.homeScore); const awayScore = parsePredictionScore(body?.awayScore);
+  if (homeScore === null || awayScore === null) return c.json({ error: "Scores must be whole numbers from 0 to 20" }, 400);
+  const displayName = typeof body?.displayName === "string" && body.displayName.trim() ? body.displayName.trim().slice(0, 80) : "Player";
+  const avatarUrl = typeof body?.avatarUrl === "string" ? body.avatarUrl : null;
+  await db.insert(schema.matchPredictionsTable).values({ matchId: id, visitorId: userId, userId, displayName, avatarUrl, homeScore, awayScore, points: 0, status: "pending", submittedAt: new Date(), lockedAt: null, calculatedAt: null, updatedAt: new Date() }).onConflictDoUpdate({ target: [schema.matchPredictionsTable.matchId, schema.matchPredictionsTable.visitorId], set: { userId, displayName, avatarUrl, homeScore, awayScore, points: 0, status: "pending", submittedAt: new Date(), lockedAt: null, calculatedAt: null, updatedAt: new Date() } });
+  return c.json(await predictionSummary(db, match, userId), 200, { "Cache-Control": "no-store" });
+});
+async function leaderboardRows(c: any, tournamentId?: number) {
+  const db = drizzle(c.env.DB, { schema }); let rows: any[];
+  if (tournamentId) { const matches = await db.select({ id: schema.matchesTable.id }).from(schema.matchesTable).where(eq(schema.matchesTable.tournamentId, tournamentId)); const ids = matches.map((item: any) => item.id); rows = ids.length ? await db.select().from(schema.matchPredictionsTable).where(inArray(schema.matchPredictionsTable.matchId, ids)) : []; } else rows = await db.select().from(schema.matchPredictionsTable);
+  const grouped = new Map<string, any>();
+  for (const row of rows) { const key = row.userId || row.visitorId; const current = grouped.get(key) || { userId: key, displayName: row.displayName || "Player", avatarUrl: row.avatarUrl || null, points: 0, predictions: 0, exactScores: 0, correctResults: 0 }; current.points += Number(row.points || 0); current.predictions += 1; current.exactScores += Number(row.points || 0) === 3 ? 1 : 0; current.correctResults += Number(row.points || 0) > 0 ? 1 : 0; grouped.set(key, current); }
+  return Array.from(grouped.values()).sort((a, b) => b.points - a.points || b.exactScores - a.exactScores || a.displayName.localeCompare(b.displayName)).map((item, index) => ({ ...item, rank: index + 1, accuracy: item.predictions ? Math.round((item.correctResults / item.predictions) * 100) : 0, movement: 0 }));
+}
+app.get("/api/predictions/leaderboard", async (c) => c.json(await leaderboardRows(c, Number(c.req.query("tournamentId")) || undefined), 200, { "Cache-Control": "no-store" }));
+app.get("/api/tournaments/:id/predictions/leaderboard", async (c) => c.json(await leaderboardRows(c, Number(c.req.param("id"))), 200, { "Cache-Control": "no-store" }));
+
 function getVapidKeys(env: Bindings): VapidKeys | null {
   const publicKey = env.VAPID_PUBLIC_KEY ?? env.VAPID_SERVER_PUBLIC_KEY;
   const privateKey = env.VAPID_PRIVATE_KEY ?? env.VAPID_SERVER_PRIVATE_KEY;
