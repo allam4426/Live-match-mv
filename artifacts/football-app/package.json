@@ -86,7 +86,7 @@
     "drizzle-orm": "catalog:",
     "hls.js": "^1.6.16",
     "hono": "^4.13.5",
-    "@clerk/backend": "^3.17.2",
+    "@clerk/backend": "^2.33.6",
     "@clerk/react": "^6.15.1"
   }
 }
