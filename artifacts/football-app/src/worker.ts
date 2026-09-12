@@ -328,7 +328,7 @@ app.get("/api/tournaments/active", async (c) => {
     return { ...t, matchStatus, matchCount: total, liveCount, stageCount: childrenByParent.get(t.id)?.length ?? 0 };
   }));
 
-  return c.json(results.filter((r) => r.matchCount > 0));
+  return c.json(results.filter((r) => r.matchCount > 0 && r.matchStatus !== "finished"));
 });
 
 app.post("/api/tournaments", async (c) => {
