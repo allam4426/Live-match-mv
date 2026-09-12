@@ -28,7 +28,9 @@ export function MatchPrediction({ matchId, match }: { matchId: number; match: Pr
 
   async function authHeaders() {
     const token = await getToken();
-    return token ? { Authorization: "Bearer " + token } : {};
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = "Bearer " + token;
+    return headers;
   }
 
   async function load() {
