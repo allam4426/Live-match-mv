@@ -96,7 +96,7 @@ router.get("/tournaments/active", async (req, res) => {
   }));
 
   // Only return tournaments that have at least one match
-  res.json(results.filter(r => r.matchCount > 0));
+  res.json(results.filter(r => r.matchCount > 0 && r.matchStatus !== "finished"));
 });
 
 router.post("/tournaments", async (req, res) => {
