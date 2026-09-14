@@ -25,8 +25,14 @@ export default function AuthPage({ mode }: { mode: "sign-in" | "sign-up" }) {
         credentials: "include",
         body: JSON.stringify(body),
       });
-      const data = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(data.error || "Something went wrong");
+      const contentType = res.headers.get("content-type") || "";
+      let data: { error?: string } = {};
+      if (contentType.includes("application/json")) {
+        data = await res.json() as { error?: string };
+      } else {
+        await res.text();
+      }
+      if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
       await refresh();
       navigate("/");
     } catch (err) {
