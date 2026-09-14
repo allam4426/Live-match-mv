@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useAuth, useUser } from "@clerk/react";
+import { useAuth } from "@/lib/useAuth";
 import { Check, Clock3, Loader2, LockKeyhole, Minus, Plus, Target, Trophy } from "lucide-react";
 import { Link } from "wouter";
 
@@ -14,8 +14,7 @@ function TeamBadge({ team }: { team: PredictionTeam }) {
 }
 
 export function MatchPrediction({ matchId, match }: { matchId: number; match: PredictionMatch }) {
-  const { isLoaded, isSignedIn, getToken } = useAuth();
-  const { user } = useUser();
+  const { isLoaded, isSignedIn, user } = useAuth();
   const [homeScore, setHomeScore] = useState(0);
   const [awayScore, setAwayScore] = useState(0);
   const [data, setData] = useState<PredictionResponse | null>(null);
@@ -26,17 +25,14 @@ export function MatchPrediction({ matchId, match }: { matchId: number; match: Pr
   const isOpen = Boolean(data?.canPredict && isSignedIn);
   const kickoffLabel = useMemo(() => new Date(match.kickoffAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }), [match.kickoffAt]);
 
-  async function authHeaders() {
-    const token = await getToken();
-    const headers: Record<string, string> = {};
-    if (token) headers.Authorization = "Bearer " + token;
-    return headers;
+  function authHeaders() {
+    return { "Content-Type": "application/json" };
   }
 
   async function load() {
     try {
       setLoading(true);
-      const response = await fetch("/api/matches/" + matchId + "/prediction", { headers: await authHeaders() });
+      const response = await fetch("/api/matches/" + matchId + "/prediction", { headers: authHeaders() });
       if (!response.ok) throw new Error("Could not load predictions");
       const next = await response.json() as PredictionResponse;
       setData(next);
@@ -61,8 +57,8 @@ export function MatchPrediction({ matchId, match }: { matchId: number; match: Pr
     try {
       const response = await fetch("/api/matches/" + matchId + "/prediction", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-        body: JSON.stringify({ homeScore, awayScore, displayName: user?.fullName || user?.username || "Player", avatarUrl: user?.imageUrl || null }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ homeScore, awayScore, displayName: user?.name || user?.username || "Player", avatarUrl: null }),
       });
       const result = await response.json() as PredictionResponse & { error?: string };
       if (!response.ok) throw new Error(result.error || "Could not save prediction");

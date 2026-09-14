@@ -1950,3 +1950,66 @@ app.all("*", async (c) => {
 });
 
 export default app;
+
+/* ─── user auth (signup/login) ─── */
+app.post("/api/auth/signup", async (c) => {
+  const { username, email, password, name } = await c.req.json() as { username: string; email: string; password: string; name?: string };
+  if (!username || !email || !password) return c.json({ error: "Missing fields" }, 400);
+  if (password.length < 6) return c.json({ error: "Password must be at least 6 characters" }, 400);
+
+  const existing = await c.env.DB.prepare("SELECT id FROM users WHERE username = ? OR email = ?").bind(username, email).first();
+  if (existing) return c.json({ error: "Username or email already in use" }, 409);
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  const id = crypto.randomUUID();
+  await c.env.DB.prepare("INSERT INTO users (id, username, email, password_hash, name, created_at) VALUES (?, ?, ?, ?, ?, unixepoch())")
+    .bind(id, username, email, passwordHash, name || username).run();
+
+  const token = await signSession(id, c.env.COOKIE_SECRET as string);
+  c.header("Set-Cookie", `session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000`);
+  return c.json({ id, username, email, name: name || username });
+});
+
+app.post("/api/auth/login", async (c) => {
+  const { username, password } = await c.req.json() as { username: string; password: string };
+  if (!username || !password) return c.json({ error: "Missing fields" }, 400);
+
+  const user = await c.env.DB.prepare("SELECT * FROM users WHERE username = ? OR email = ?").bind(username, username).first();
+  if (!user || !user.password_hash) return c.json({ error: "Invalid credentials" }, 401);
+
+  const valid = await bcrypt.compare(password, user.password_hash as string);
+  if (!valid) return c.json({ error: "Invalid credentials" }, 401);
+
+  const token = await signSession(String(user.id), c.env.COOKIE_SECRET as string);
+  c.header("Set-Cookie", `session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000`);
+  return c.json({ id: user.id, username: user.username, email: user.email, name: user.name });
+});
+
+app.post("/api/auth/logout", async (c) => {
+  c.header("Set-Cookie", `session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`);
+  return c.json({ ok: true });
+});
+
+app.get("/api/auth/me", async (c) => {
+  const cookie = c.req.header("Cookie") || "";
+  const match = cookie.match(/session=([^;]+)/);
+  if (!match) return c.json({ user: null });
+  const userId = await verifySession(match[1], c.env.COOKIE_SECRET as string);
+  if (!userId) return c.json({ user: null });
+  const user = await c.env.DB.prepare("SELECT id, username, email, name FROM users WHERE id = ?").bind(userId).first();
+  return c.json({ user: user || null });
+});
+
+async function signSession(userId: string, secret: string): Promise<string> {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(userId));
+  const sigHex = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return `${userId}.${sigHex}`;
+}
+
+async function verifySession(token: string, secret: string): Promise<string | null> {
+  const [userId, sig] = token.split(".");
+  if (!userId || !sig) return null;
+  const expected = await signSession(userId, secret);
+  return expected === token ? userId : null;
+}
