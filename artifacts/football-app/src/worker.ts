@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { getSignedCookie, setSignedCookie, deleteCookie } from "hono/cookie";
 import bcrypt from "bcryptjs";
-import { verifyToken } from "@clerk/backend";
 import { drizzle } from "drizzle-orm/d1";
 import { eq, or, desc, inArray, and, asc, count as sqlCount, sql } from "drizzle-orm";
 import * as schema from "@workspace/db/schema-d1";
@@ -1153,9 +1152,10 @@ function calculatePredictionPoints(predHome: number, predAway: number, actualHom
   return predictionOutcome(predHome, predAway) === predictionOutcome(actualHome, actualAway) ? 1 : 0;
 }
 async function getPredictionUserId(c: any): Promise<string | null> {
-  const header = c.req.header("Authorization");
-  if (!header?.startsWith("Bearer ") || !c.env.CLERK_SECRET_KEY) return null;
-  try { const payload = await verifyToken(header.slice(7), { secretKey: c.env.CLERK_SECRET_KEY }); return typeof payload.sub === "string" ? payload.sub : null; } catch { return null; }
+  const cookie = c.req.header("Cookie") || "";
+  const match = cookie.match(/session=([^;]+)/);
+  if (!match) return null;
+  return await verifySession(match[1], c.env.COOKIE_SECRET as string);
 }
 async function isPredictionParticipant(c: any, tournamentId: number, userId: string) {
   try { const row = await c.env.DB.prepare("SELECT id FROM prediction_participants WHERE tournament_id = ? AND user_id = ? LIMIT 1").bind(tournamentId, userId).first(); return Boolean(row); } catch { return false; }
