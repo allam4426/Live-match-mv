@@ -1946,9 +1946,9 @@ app.post("/api/auth/signup", async (c) => {
   if (existing) return c.json({ error: "Username or email already in use" }, 409);
 
   const passwordHash = await bcrypt.hash(password, 10);
-  const id = crypto.randomUUID();
-  await c.env.DB.prepare("INSERT INTO users (id, username, email, password_hash, display_name, created_at) VALUES (?, ?, ?, ?, ?, unixepoch())")
-    .bind(id, username, email, passwordHash, name || username).run();
+  const inserted = await c.env.DB.prepare("INSERT INTO users (username, email, password_hash, display_name, created_at) VALUES (?, ?, ?, ?, unixepoch()) RETURNING id")
+    .bind(username, email, passwordHash, name || username).first();
+  const id = String(inserted.id);
 
   const token = await signSession(id, getCookieSecret(c.env));
   c.header("Set-Cookie", `session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000`);
