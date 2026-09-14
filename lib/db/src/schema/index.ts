@@ -12,3 +12,4 @@ export * from "./spotlights";
 export * from "./push_subscriptions";
 export * from "./trophies";
 export * from "./match_predictions";
+export * from "./users";

@@ -9,6 +9,7 @@ import tournamentsRouter from "./tournaments";
 import eventsRouter from "./events";
 import lineupRouter from "./lineup";
 import adminAuthRouter from "./admin-auth";
+import authRouter from "./auth";
 import adminStaffRouter from "./admin-staff";
 import squadRouter from "./squad";
 import bannersRouter from "./banners";
@@ -20,6 +21,7 @@ import trophiesRouter from "./trophies";
 const router: IRouter = Router();
 
 router.use(adminAuthRouter);
+router.use(authRouter);
 router.use(adminStaffRouter);
 router.use(squadRouter);
 router.use(healthRouter);
