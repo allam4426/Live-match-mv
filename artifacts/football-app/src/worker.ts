@@ -1947,7 +1947,7 @@ app.post("/api/auth/signup", async (c) => {
 
   const passwordHash = await bcrypt.hash(password, 10);
   const id = crypto.randomUUID();
-  await c.env.DB.prepare("INSERT INTO users (id, username, email, password_hash, name, created_at) VALUES (?, ?, ?, ?, ?, unixepoch())")
+  await c.env.DB.prepare("INSERT INTO users (id, username, email, password_hash, display_name, created_at) VALUES (?, ?, ?, ?, ?, unixepoch())")
     .bind(id, username, email, passwordHash, name || username).run();
 
   const token = await signSession(id, getCookieSecret(c.env));
@@ -1959,7 +1959,7 @@ app.post("/api/auth/login", async (c) => {
   const { username, password } = await c.req.json() as { username: string; password: string };
   if (!username || !password) return c.json({ error: "Missing fields" }, 400);
 
-  const user = await c.env.DB.prepare("SELECT * FROM users WHERE username = ? OR email = ?").bind(username, username).first();
+  const user = await c.env.DB.prepare("SELECT id, username, email, password_hash, display_name FROM users WHERE username = ? OR email = ?").bind(username, username).first();
   if (!user || !user.password_hash) return c.json({ error: "Invalid credentials" }, 401);
 
   const valid = await bcrypt.compare(password, user.password_hash as string);
@@ -1967,7 +1967,7 @@ app.post("/api/auth/login", async (c) => {
 
   const token = await signSession(String(user.id), getCookieSecret(c.env));
   c.header("Set-Cookie", `session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000`);
-  return c.json({ id: user.id, username: user.username, email: user.email, name: user.name });
+  return c.json({ id: user.id, username: user.username, email: user.email, name: user.display_name || user.username });
 });
 
 app.post("/api/auth/logout", async (c) => {
@@ -1981,7 +1981,7 @@ app.get("/api/auth/me", async (c) => {
   if (!match) return c.json({ user: null });
   const userId = await verifySession(match[1], getCookieSecret(c.env));
   if (!userId) return c.json({ user: null });
-  const user = await c.env.DB.prepare("SELECT id, username, email, name FROM users WHERE id = ?").bind(userId).first();
+  const user = await c.env.DB.prepare("SELECT id, username, email, display_name AS name FROM users WHERE id = ?").bind(userId).first();
   return c.json({ user: user || null });
 });
 
