@@ -34,7 +34,9 @@ export default function AuthPage({ mode }: { mode: "sign-in" | "sign-up" }) {
       }
       if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
       await refresh();
-      navigate("/");
+      const requestedReturnTo = new URLSearchParams(window.location.search).get("returnTo");
+      const returnTo = requestedReturnTo && requestedReturnTo.startsWith("/") && !requestedReturnTo.startsWith("//") ? requestedReturnTo : "/";
+      navigate(returnTo);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -72,7 +74,7 @@ export default function AuthPage({ mode }: { mode: "sign-in" | "sign-up" }) {
       </form>
       <p className="mt-4 text-center text-xs text-muted-foreground">
         {isSignUp ? "Already have an account? " : "Don't have an account? "}
-        <a href={isSignUp ? "/sign-in" : "/sign-up"} className="font-bold text-primary">{isSignUp ? "Sign in" : "Sign up"}</a>
+        <a href={(isSignUp ? "/sign-in" : "/sign-up") + window.location.search} className="font-bold text-primary">{isSignUp ? "Sign in" : "Sign up"}</a>
       </p>
     </div>
   );
