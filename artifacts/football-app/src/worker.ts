@@ -1951,7 +1951,7 @@ app.post("/api/auth/signup", async (c) => {
   const id = String(inserted.id);
 
   const token = await signSession(id, getCookieSecret(c.env));
-  c.header("Set-Cookie", `session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000`);
+  c.header("Set-Cookie", `session=${token}; Domain=.livematchmv.online; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000`);
   return c.json({ id, username, email, name: name || username });
 });
 
@@ -1966,12 +1966,12 @@ app.post("/api/auth/login", async (c) => {
   if (!valid) return c.json({ error: "Invalid credentials" }, 401);
 
   const token = await signSession(String(user.id), getCookieSecret(c.env));
-  c.header("Set-Cookie", `session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000`);
+  c.header("Set-Cookie", `session=${token}; Domain=.livematchmv.online; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000`);
   return c.json({ id: user.id, username: user.username, email: user.email, name: user.display_name || user.username });
 });
 
 app.post("/api/auth/logout", async (c) => {
-  c.header("Set-Cookie", `session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`);
+  c.header("Set-Cookie", `session=; Domain=.livematchmv.online; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`);
   return c.json({ ok: true });
 });
 
