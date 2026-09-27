@@ -4,6 +4,7 @@ import { Home as HomeIcon, Gamepad2, LayoutGrid, Sun, Moon, Trophy, Users, Lock,
 import { useAdminMe } from "@workspace/api-client-react";
 import { useTheme } from "@/hooks/use-theme";
 import { PushBell } from "./push-bell";
+import { UserMenu } from "./user-menu";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -68,6 +69,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </Link>
               )}
             </nav>
+            {location.startsWith("/match/") && <UserMenu />}
             <PushBell />
             <button
               onClick={toggle}

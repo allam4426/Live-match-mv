@@ -1,4 +1,4 @@
-import { useListActiveTournaments } from "@workspace/api-client-react";
+import { useListTournaments } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { Trophy, Layers, Search } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,9 +19,10 @@ const STATUS_BADGE: Record<string, { label: string; className: string; dot?: boo
 };
 
 export default function TournamentsPage() {
-  const { data: tournaments, isLoading } = useListActiveTournaments();
+  const { data: tournaments, isLoading } = useListTournaments();
   const [sport, setSport] = useState<"All" | "football" | "futsal">("All");
   const [q, setQ] = useState("");
+  const [status, setStatus] = useState<"all" | "ongoing" | "upcoming" | "finished">("all");
 
   const filtered = tournaments?.filter(t => {
     const sportOk = sport === "All" || t.sport === sport;
@@ -32,6 +33,7 @@ export default function TournamentsPage() {
   const ongoing  = filtered.filter(t => t.matchStatus === "ongoing" || t.matchStatus === "live");
   const upcoming = filtered.filter(t => t.matchStatus === "upcoming");
   const finished = filtered.filter(t => t.matchStatus === "finished");
+  const statusFiltered = status === "all" ? filtered : status === "ongoing" ? ongoing : status === "upcoming" ? upcoming : finished;
 
   function TournamentCard({ t }: { t: typeof filtered[0] }) {
     const badge = STATUS_BADGE[t.matchStatus ?? "finished"] ?? STATUS_BADGE.finished!;
@@ -122,21 +124,43 @@ export default function TournamentsPage() {
         ))}
       </div>
 
+      {/* Status filter */}
+      <div className="flex items-center gap-2 px-4 mb-4">
+        {([
+          { key: "all", label: "All" },
+          { key: "ongoing", label: "Ongoing" },
+          { key: "upcoming", label: "Upcoming" },
+          { key: "finished", label: "Finished" },
+        ] as const).map(s => (
+          <button key={s.key} onClick={() => setStatus(s.key)}
+            className={cn(
+              "rounded-full px-4 py-1.5 text-xs font-semibold border transition-all",
+              status === s.key
+                ? "bg-primary text-white border-primary"
+                : "bg-card text-muted-foreground border-border hover:border-primary/40"
+            )}>{s.label}</button>
+        ))}
+      </div>
+
       {/* Content */}
       {isLoading ? (
         <div className="grid grid-cols-1 gap-2 px-4">
           {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-24 w-full rounded-2xl" />)}
         </div>
-      ) : filtered.length === 0 ? (
+      ) : statusFiltered.length === 0 ? (
         <div className="py-20 text-center px-4">
           <Trophy className="w-10 h-10 mx-auto mb-3 opacity-20" />
           <p className="text-sm font-medium text-muted-foreground">No tournaments found</p>
         </div>
-      ) : (
+      ) : status === "all" ? (
         <div className="space-y-5">
           <Section title="Live & Ongoing" items={ongoing} />
           <Section title="Upcoming" items={upcoming} />
           <Section title="Finished" items={finished} />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-2 px-4">
+          {statusFiltered.map(t => <TournamentCard key={t.id} t={t} />)}
         </div>
       )}
     </div>

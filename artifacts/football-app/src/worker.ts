@@ -1209,10 +1209,11 @@ app.post("/api/matches/:id/prediction", async (c) => {
   const id = Number(c.req.param("id")); const { db, match } = await getPredictionMatch(c, id);
   if (!match) return c.json({ error: "Match not found" }, 404);
   if (!predictionsAreOpen(match)) return c.json({ error: "Predictions lock three minutes before kick-off" }, 409);
-  if (match.tournamentId && !(await isPredictionParticipant(c, match.tournamentId, userId))) return c.json({ error: "Participate in the tournament before guessing" }, 403);
+  if (match.tournamentId) { try { await c.env.DB.prepare("INSERT OR IGNORE INTO prediction_participants (tournament_id, user_id) VALUES (?, ?)").bind(match.tournamentId, userId).run(); } catch {} }
   const body = await c.req.json(); const homeScore = parsePredictionScore(body?.homeScore); const awayScore = parsePredictionScore(body?.awayScore);
   if (homeScore === null || awayScore === null) return c.json({ error: "Scores must be whole numbers from 0 to 20" }, 400);
-  const displayName = typeof body?.displayName === "string" && body.displayName.trim() ? body.displayName.trim().slice(0, 80) : "Player";
+  const userRow = await c.env.DB.prepare("SELECT username, display_name FROM users WHERE id = ?").bind(userId).first();
+  const displayName = ((userRow && (userRow.display_name || userRow.username)) || "Player") as string;
   const avatarUrl = typeof body?.avatarUrl === "string" ? body.avatarUrl : null;
   await db.insert(schema.matchPredictionsTable).values({ matchId: id, visitorId: userId, userId, displayName, avatarUrl, homeScore, awayScore, points: 0, status: "pending", submittedAt: new Date(), lockedAt: null, calculatedAt: null, updatedAt: new Date() }).onConflictDoUpdate({ target: [schema.matchPredictionsTable.matchId, schema.matchPredictionsTable.visitorId], set: { userId, displayName, avatarUrl, homeScore, awayScore, points: 0, status: "pending", submittedAt: new Date(), lockedAt: null, calculatedAt: null, updatedAt: new Date() } });
   return c.json(await predictionSummary(db, match, userId), 200, { "Cache-Control": "no-store" });
@@ -1948,6 +1949,9 @@ app.post("/api/auth/signup", async (c) => {
   const passwordHash = await bcrypt.hash(password, 10);
   const inserted = await c.env.DB.prepare("INSERT INTO users (username, email, password_hash, display_name, created_at) VALUES (?, ?, ?, ?, unixepoch()) RETURNING id")
     .bind(username, email, passwordHash, name || username).first();
+  if (!inserted) {
+    return c.json({ error: "Failed to create user" }, 500);
+  }
   const id = String(inserted.id);
 
   const token = await signSession(id, getCookieSecret(c.env));
@@ -2023,3 +2027,26 @@ app.all("*", async (c) => {
 
 export default app;
 
+
+app.post("/api/auth/change-password", async (c) => {
+  const cookie = c.req.header("Cookie") || "";
+  const match = cookie.match(/session=([^;]+)/);
+  if (!match) return c.json({ error: "Not signed in" }, 401);
+  const userId = await verifySession(match[1], getCookieSecret(c.env));
+  if (!userId) return c.json({ error: "Not signed in" }, 401);
+
+  const { currentPassword, newPassword } = await c.req.json() as { currentPassword: string; newPassword: string };
+  if (!currentPassword || !newPassword) return c.json({ error: "Missing fields" }, 400);
+  if (newPassword.length < 6) return c.json({ error: "New password must be at least 6 characters" }, 400);
+
+  const user = await c.env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(userId).first();
+  if (!user || !user.password_hash) return c.json({ error: "User not found" }, 404);
+
+  const valid = await bcrypt.compare(currentPassword, user.password_hash as string);
+  if (!valid) return c.json({ error: "Current password is incorrect" }, 401);
+
+  const newHash = await bcrypt.hash(newPassword, 10);
+  await c.env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?").bind(newHash, userId).run();
+
+  return c.json({ ok: true });
+});
