@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "wouter";
-import { Home as HomeIcon, Gamepad2, LayoutGrid, Sun, Moon, Trophy, Users, Lock, MoreHorizontal } from "lucide-react";
+import { Home as HomeIcon, Radio, LayoutGrid, Sun, Moon, Trophy, Users, Lock, MoreHorizontal } from "lucide-react";
 import { useAdminMe } from "@workspace/api-client-react";
 import { useTheme } from "@/hooks/use-theme";
 import { PushBell } from "./push-bell";
@@ -26,7 +26,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const bottomNav = [
     { href: "/", label: "Home", icon: HomeIcon },
-    { href: "/live", label: "Live", icon: Gamepad2 },
+    { href: "/live", label: "Live", icon: Radio },
     { href: "/tournaments", label: "Cups", icon: Trophy },
     { href: "/players", label: "Players", icon: Users },
     { href: "/more", label: "More", icon: MoreHorizontal },

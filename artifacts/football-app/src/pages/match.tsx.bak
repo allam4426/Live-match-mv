@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { PenaltyIcon } from "@/components/penalty-icon";
 import { SubstitutionIcon } from "@/components/substitution-icon";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
+import { MatchPrediction } from "@/components/match-prediction";
 
 /* ─── helpers ─── */
 
@@ -178,7 +179,7 @@ function useLiveStopwatch(
 }
 
 /* ─── tabs ─── */
-type Tab = "Summary" | "Stats" | "Squad" | "Standings";
+type Tab = "Summary" | "Stats" | "Squad" | "Standings" | "Prediction";
 
 type H2HMatch = {
   id: number;
@@ -1962,6 +1963,7 @@ export default function MatchDetails() {
 
   const tabs: Tab[] = [
     "Summary",
+    "Prediction",
     "Stats",
     "Squad",
     ...(hasTournament ? ["Standings" as Tab] : []),
@@ -2241,6 +2243,7 @@ export default function MatchDetails() {
       {/* ── Tab content ── */}
       <div className="mx-4 mt-2">
         {activeTab === "Summary" && <SummaryTab match={match} />}
+        {activeTab === "Prediction" && <MatchPrediction matchId={matchId} match={match} />}
         {activeTab === "Stats" && <StatsTab match={match} />}
         {activeTab === "Squad" && <SquadTab matchId={matchId} match={match} />}
         {activeTab === "Standings" && hasTournament && (
