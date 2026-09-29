@@ -13,27 +13,33 @@ export function BannerSlot({ position }: { position: "top_home" | "top_live" }) 
   }, [active.length]);
 
   if (active.length === 0) return null;
-  const banner = active[idx % active.length]!;
 
-  const inner = (
-    <div className="mx-4 mt-3 rounded-xl overflow-hidden border border-border/40 shadow-sm transition-opacity duration-500">
-      <img
-        key={banner.id}
-        src={banner.imageUrl}
-        alt="Advertisement"
-        className="w-full object-cover max-h-20"
-        onError={e => { (e.currentTarget.parentElement as HTMLElement | null)?.remove(); }}
-      />
+  return (
+    <div className="mx-4 mt-3 rounded-xl overflow-hidden border border-border/40 shadow-sm relative">
+      <div
+        className="flex flex-col transition-transform duration-500 ease-out"
+        style={{ transform: `translateY(-${idx * 100}%)` }}
+      >
+        {active.map((banner) => {
+          const img = (
+            <img
+              src={banner.imageUrl}
+              alt="Advertisement"
+              className="w-full object-cover max-h-20 shrink-0"
+              onError={e => { (e.currentTarget.parentElement as HTMLElement | null)?.remove(); }}
+            />
+          );
+          return (
+            <div key={banner.id} className="w-full shrink-0">
+              {banner.linkUrl ? (
+                <a href={banner.linkUrl} target="_blank" rel="noopener noreferrer" className="block">
+                  {img}
+                </a>
+              ) : img}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
-
-  if (banner.linkUrl) {
-    return (
-      <a href={banner.linkUrl} target="_blank" rel="noopener noreferrer" className="block">
-        {inner}
-      </a>
-    );
-  }
-
-  return inner;
 }
