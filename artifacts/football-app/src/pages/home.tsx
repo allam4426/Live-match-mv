@@ -46,15 +46,23 @@ function SpotlightCarousel({ items }: { items: CarouselItem[] }) {
 
   useEffect(() => { setIdx(0); }, [items.length]);
 
-  const current = items[idx] ?? items[0];
-  if (!current) return null;
+  if (items.length === 0) return null;
 
   return (
-    <div className="relative">
-      {current.kind === "image"
-        ? <ImageSpotlightCard key={current.data.id} spotlight={current.data} />
-        : <SpotlightCard key={current.data.id} match={current.data} />
-      }
+    <div className="relative overflow-hidden">
+      <div
+        className="flex transition-transform duration-500 ease-out"
+        style={{ transform: `translateX(-${idx * 100}%)` }}
+      >
+        {items.map((item) => (
+          <div key={`${item.kind}-${item.data.id}`} className="w-full shrink-0">
+            {item.kind === "image"
+              ? <ImageSpotlightCard spotlight={item.data} />
+              : <SpotlightCard match={item.data} />
+            }
+          </div>
+        ))}
+      </div>
       {items.length > 1 && (
         <div className="flex items-center justify-center gap-1.5 mt-2.5">
           {items.map((_, i) => (
