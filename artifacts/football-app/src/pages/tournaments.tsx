@@ -1,4 +1,4 @@
-import { useListTournaments } from "@workspace/api-client-react";
+import { useListTournaments, type TournamentWithStatus } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { Trophy, Layers, Search } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,7 +19,10 @@ const STATUS_BADGE: Record<string, { label: string; className: string; dot?: boo
 };
 
 export default function TournamentsPage() {
-  const { data: tournaments, isLoading } = useListTournaments();
+  const { data: tournamentRows, isLoading } = useListTournaments();
+  // /api/tournaments includes these fields at runtime; keep this page typed to
+  // the richer response until the generated client is regenerated from OpenAPI.
+  const tournaments = tournamentRows as unknown as TournamentWithStatus[] | undefined;
   const [sport, setSport] = useState<"All" | "football" | "futsal">("All");
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<"all" | "ongoing" | "upcoming" | "finished">("all");
