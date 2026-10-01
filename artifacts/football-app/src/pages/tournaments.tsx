@@ -22,7 +22,13 @@ export default function TournamentsPage() {
   const { data: tournamentRows, isLoading } = useListTournaments();
   // /api/tournaments includes these fields at runtime; keep this page typed to
   // the richer response until the generated client is regenerated from OpenAPI.
-  const tournaments = tournamentRows as unknown as TournamentWithStatus[] | undefined;
+  const allTournaments = tournamentRows as unknown as TournamentWithStatus[] | undefined;
+  const tournamentIds = new Set(allTournaments?.map(t => t.id) ?? []);
+  // List a championship once. Its child tournaments are still reachable from
+  // the championship page, but shouldn't appear as separate top-level cards.
+  const tournaments = allTournaments?.filter(t =>
+    t.parentTournamentId == null || !tournamentIds.has(t.parentTournamentId)
+  );
   const [sport, setSport] = useState<"All" | "football" | "futsal">("All");
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<"all" | "ongoing" | "upcoming" | "finished">("all");
