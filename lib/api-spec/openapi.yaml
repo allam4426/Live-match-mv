@@ -675,7 +675,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Tournament"
+                  $ref: "#/components/schemas/TournamentWithStatus"
     post:
       operationId: createTournament
       tags: [tournaments]

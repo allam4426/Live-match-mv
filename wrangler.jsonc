@@ -1,0 +1,18 @@
+{
+  "name": "live-match",
+  "compatibility_date": "2026-08-10",
+  "main": "artifacts/football-app/src/worker.ts",
+  "assets": {
+    "directory": "./artifacts/football-app/dist/public",
+    "not_found_handling": "single-page-application",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "livematchmv",
+      "database_id": "d7dce5e7-6932-4ac7-a0c8-7d695d5dbbc8"
+    }
+  ]
+}

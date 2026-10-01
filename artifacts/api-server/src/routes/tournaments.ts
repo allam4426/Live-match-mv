@@ -37,13 +37,67 @@ function collectTournamentTreeIds(
   return [...ids];
 }
 
+function addTournamentStatus(
+  tournaments: Array<typeof tournamentsTable.$inferSelect>,
+  matches: Array<typeof matchesTable.$inferSelect>,
+) {
+  const childrenByParent = new Map<number, number[]>();
+  for (const tournament of tournaments) {
+    if (tournament.parentTournamentId !== null) {
+      const children = childrenByParent.get(tournament.parentTournamentId) ?? [];
+      children.push(tournament.id);
+      childrenByParent.set(tournament.parentTournamentId, children);
+    }
+  }
+
+  const matchesByTournament = new Map<number, typeof matches>();
+  for (const match of matches) {
+    if (match.tournamentId === null) continue;
+    const tournamentMatches = matchesByTournament.get(match.tournamentId) ?? [];
+    tournamentMatches.push(match);
+    matchesByTournament.set(match.tournamentId, tournamentMatches);
+  }
+
+  return tournaments.map((tournament) => {
+    const stageIds = [tournament.id];
+    const seen = new Set(stageIds);
+    for (let index = 0; index < stageIds.length; index++) {
+      for (const childId of childrenByParent.get(stageIds[index]!) ?? []) {
+        if (seen.has(childId)) continue;
+        seen.add(childId);
+        stageIds.push(childId);
+      }
+    }
+
+    const tournamentMatches = stageIds.flatMap((id) => matchesByTournament.get(id) ?? []);
+    const liveCount = tournamentMatches.filter((match) => match.status === "live").length;
+    const scheduledCount = tournamentMatches.filter((match) => match.status === "scheduled").length;
+    const finishedCount = tournamentMatches.filter((match) => match.status === "finished").length;
+
+    const matchStatus: "live" | "ongoing" | "upcoming" | "finished" =
+      liveCount > 0 ? "live" :
+      scheduledCount > 0 && finishedCount > 0 ? "ongoing" :
+      scheduledCount > 0 ? "upcoming" : "finished";
+
+    return {
+      ...tournament,
+      matchStatus,
+      matchCount: tournamentMatches.length,
+      liveCount,
+      stageCount: childrenByParent.get(tournament.id)?.length ?? 0,
+    };
+  });
+}
+
 router.get("/tournaments", async (req, res) => {
   const sport = req.query.sport as string | undefined;
-  let rows = await db.select().from(tournamentsTable).orderBy(tournamentsTable.name);
-  if (sport && sport !== "all") {
-    rows = rows.filter(t => t.sport === sport);
-  }
-  res.json(rows);
+  const rows = await db.select().from(tournamentsTable).orderBy(tournamentsTable.name);
+  const tournamentIds = rows.map(tournament => tournament.id);
+  const matches = tournamentIds.length > 0
+    ? await db.select().from(matchesTable).where(inArray(matchesTable.tournamentId, tournamentIds))
+    : [];
+  const results = addTournamentStatus(rows, matches);
+  res.json(sport && sport !== "all" ? results.filter(tournament => tournament.sport === sport) : results);
 });
 
 // IMPORTANT: /tournaments/active must be BEFORE /tournaments/:id
