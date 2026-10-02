@@ -15,24 +15,24 @@ export function BannerSlot({ position }: { position: "top_home" | "top_live" }) 
   if (active.length === 0) return null;
 
   return (
-    <div className="mx-4 mt-3 rounded-xl overflow-hidden border border-border/40 shadow-sm relative">
+    <div className="mx-4 mt-3 h-20 rounded-xl overflow-hidden border border-border/40 shadow-sm relative">
       <div
         className="flex flex-col transition-transform duration-500 ease-out"
-        style={{ transform: `translateY(-${idx * 100}%)` }}
+        style={{ transform: `translateY(-${idx * 5}rem)` }}
       >
         {active.map((banner) => {
           const img = (
             <img
               src={banner.imageUrl}
               alt="Advertisement"
-              className="w-full object-cover max-h-20 shrink-0"
+              className="block h-20 w-full object-cover"
               onError={e => { (e.currentTarget.parentElement as HTMLElement | null)?.remove(); }}
             />
           );
           return (
-            <div key={banner.id} className="w-full shrink-0">
+            <div key={banner.id} className="h-20 w-full shrink-0">
               {banner.linkUrl ? (
-                <a href={banner.linkUrl} target="_blank" rel="noopener noreferrer" className="block">
+                <a href={banner.linkUrl} target="_blank" rel="noopener noreferrer" className="block h-20 w-full">
                   {img}
                 </a>
               ) : img}
